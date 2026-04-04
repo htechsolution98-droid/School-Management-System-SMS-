@@ -92,7 +92,7 @@ import dj_database_url
 
 DATABASES = {
     'default': dj_database_url.config(
-        default='sqlite:///db.sqlite3',  # fallback for local
+        default=os.environ.get('DATABASE_URL'),
         conn_max_age=600
     )
 }
