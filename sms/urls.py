@@ -78,7 +78,7 @@ router.register(r'FeeVerifyView', FeeVerifyView, basename='FeeVerifyView')
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/',include(router.urls)),
-    path('api/access/',TokenObtainPairView.as_view()),
+    path('api/access/',CustomLoginView.as_view()),
     path('api/refresh/',TokenRefreshView.as_view()),
     
     path('form_page/', TemplateView.as_view(template_name = 'add_form.html')),

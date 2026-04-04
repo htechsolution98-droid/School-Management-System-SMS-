@@ -43,6 +43,7 @@ INSTALLED_APPS = [
 ]
 ALLOWED_HOSTS = ['*']  # for testing
 MIDDLEWARE = [
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -87,18 +88,14 @@ RAZOR_PAY_SECRET_KEY = 'tOuPZYUHmzksgtc0370q89fO'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+import dj_database_url
 
 DATABASES = {
-    "default": {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'sms',
-        'USER':'postgres',
-        'HOST': 'localhost',
-        'PORT': '5432',
-        'PASSWORD':'root',
-    }
+    'default': dj_database_url.config(
+        default='sqlite:///db.sqlite3',  # fallback for local
+        conn_max_age=600
+    )
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
