@@ -1,0 +1,424 @@
+from django.shortcuts import render
+from rest_framework.viewsets import ModelViewSet
+from .models import *
+from .serializer import *
+from rest_framework.permissions import BasePermission ,IsAuthenticated
+import random
+import string
+from django.core.mail import send_mail
+from django.contrib.auth.models import User,Group
+
+from django.conf import settings
+from django.db import transaction
+
+from rest_framework.views import APIView
+from rest_framework.generics import RetrieveAPIView
+from rest_framework.response import Response
+
+from django.db.models import Q
+
+from rest_framework_simplejwt.views import TokenObtainPairView
+
+# Create your views here.
+# set access and refresh token in cookie 
+
+class CustomLoginView(TokenObtainPairView):
+    serializer_class = CustomeLoginSerializer
+
+    
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        
+        if response.status_code == 200:
+            access = response.data.pop('access',None)
+            refresh = response.data.pop('refresh',None)
+            
+            response.set_cookie(
+                key='access_token',
+                value=access,
+                httponly=True,
+                secure=False, # when want to use with https make it True
+                samesite='Lax'
+            )
+            
+            response.set_cookie(
+                key='refresh_token',
+                value=refresh,
+                httponly=True,
+                secure=False,# when want to use with https make it True
+                samesite='Lax'
+            )
+
+        return response
+    
+
+from rest_framework_simplejwt.views  import TokenRefreshView
+
+class CookieTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        
+        refresh_token = request.COOKIES.get('refresh_token')
+        
+        if not refresh_token:
+            return None
+        
+        request.data['refresh'] = refresh_token
+        
+        response = super().post(request, *args, **kwargs)
+        
+        if response.status_code == 200:
+            access_token = response.get('access')
+            
+            response.set_cookie(
+                key='access_token',
+                value=access_token,
+                httponly=True,
+                secure=False,
+                samesite='Lax'
+            )
+            
+        return response
+            
+            
+#====== CODE for GENERATE ID & CODE =====
+def generate_school_code(name):
+    school_name = name.split(' ')[0]
+    digit = string.digits
+
+    four_digit = ''.join(random.choices(digit,k=4))
+    school_code = school_name+four_digit
+
+    if School.objects.filter(code = school_code).exists():
+        return generate_school_code(name)
+
+    return school_code
+
+def generate_staff_username(name):
+    Staff_name = name.split(' ')[0]
+    digit = string.digits
+
+    four_digit = ''.join(random.choices(digit,k=4))
+    Staff_username = Staff_name+four_digit
+
+    if User.objects.filter(username = Staff_username).exists():
+        return generate_school_code(name)
+
+    return Staff_username
+
+#======END CODE for GENERATE ID & CODE =====
+
+
+# =========PERMISSIONS===========
+class Is_super_admin(BasePermission):
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and \
+               request.user.groups.filter(name='super_admin').exists()
+    
+
+class Is_admin_trustee(BasePermission):
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and \
+               request.user.groups.filter(name='admin(trustee)').exists()
+               
+class IsCLerk(BasePermission):
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and \
+               request.user.groups.filter(name='CLERK').exists()
+               
+class Isprincipal(BasePermission):
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and \
+               request.user.groups.filter(name='PRINCIPAL').exists()
+
+
+
+class SchoolView(ModelViewSet):
+    queryset = School.objects.all()
+    serializer_class = SchoolSerializer
+    # permission_classes = [IsAuthenticated, Is_super_admin]
+
+    def perform_create(self, serializer):
+        name = serializer.validated_data.get('name')
+        school_code = generate_school_code(name)
+
+        with transaction.atomic():
+            user = User.objects.create(username=school_code)
+            password = school_code
+            user.set_password(password)
+            user.save()
+            
+            group , create= Group.objects.get_or_create(name = 'admin(trustee)')
+            user.groups.add(group)
+
+            send_mail(
+                subject="School Login Details",
+                message=f"Username: {school_code}\nPassword: {password}",
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[serializer.validated_data.get('email')],
+            )
+
+            serializer.save(code=school_code, login_id=user)
+
+
+
+class StaffView(ModelViewSet):
+    queryset = Staff.objects.all()
+    serializer_class = StaffSerializer
+    permission_classes = [IsAuthenticated,Is_admin_trustee]
+
+    def perform_create(self, serializer):
+        name = serializer.validated_data.get('name')
+        
+        category = serializer.validated_data.get('category')
+
+        group, created = Group.objects.get_or_create(name=category)
+
+        username = generate_staff_username(name)
+        user = User(username=username)
+        user.set_password(username)
+        user.save()
+
+        user.groups.add(group)
+
+        serializer.save(user = user)
+
+
+# =============TO ask more=========       
+
+# class FormViewSet(ModelViewSet):
+#     queryset = Form.objects.all()
+#     serializer_class = FormSerializer
+#     # permission_classes = [IsAuthenticated]
+
+# class FormDetailAPIView(RetrieveAPIView):
+#     queryset = Form.objects.all()
+#     serializer_class = FormSerializer
+
+
+# class SubmitFormView(APIView):
+#     def post(self, request, id):
+#         print("RAW BODY:", request.body)
+#         print("PARSED DATA:", request.data)
+
+#         form = Form.objects.get(id=id)
+
+#         for field in form.fields.all():
+#             print("Looking for key:", str(field.id))
+
+#             value = request.data.get(str(field.id))
+#             print("VALUE FOUND:", value)
+
+#             field.value = value
+#             field.save()
+
+#         return Response({"message": "Saved"})
+    
+# =============end TO ask more===========
+
+
+# class StudentView(ModelViewSet):
+#     queryset = Student.objects.all()
+#     serializer_class = StudentSerializer
+
+#     def perform_create(self, serializer):
+#         student = serializer.save()
+
+#     # Now safely access fields from the saved instance
+#         link = f"http://127.0.0.1:8000/admission?id={student.id}"
+
+#         send_mail(
+#             subject="Admission Form",
+#             message=f"Fill this admission form using the link: {link}",
+#             from_email=settings.EMAIL_HOST_USER,
+#             recipient_list=[student.email],
+#         )
+
+       
+# class StudentDocumentview(ModelViewSet):
+#     queryset = StudentDocument.objects.all()
+#     serializer_class = StudentDocumentSerializer
+    
+#     def get_queryset(self):
+#         queryset = super().get_queryset()
+#         student_id = self.request.query_params.get('student_id')
+
+#         if student_id:
+#             queryset = queryset.filter(student_id=student_id)
+
+#         return queryset
+    
+
+class StudentFIllView(ModelViewSet):
+    queryset = Student.objects.all()
+    serializer_class = StudentFIllSerilaizer
+
+
+class ClerkVerifyView(ModelViewSet):
+    queryset = Student.objects.all()
+    serializer_class = ClerkVerifySerializr
+    
+
+class PrincipleVerifyView(ModelViewSet):
+    queryset = Student.objects.all()
+    serializer_class = PrincipleVerifySerializr
+    
+    def get_queryset(self):
+        return Student.objects.filter(clerk_verified = True)
+
+
+class FeeVerifyView(ModelViewSet):
+    queryset = Student.objects.all()
+    serializer_class = FeesVerifySerializr
+    
+    def get_queryset(self):
+        return Student.objects.filter(Q(clerk_verified = True) & Q(principle_verified=True))
+
+
+# ========= admissions process views ========
+from rest_framework import status
+
+class AdmissionFormViewSet(ModelViewSet):
+    queryset = AdmissionForm.objects.all()
+    serializer_class = AdmissionFormSerializer
+    permission_classes = [Is_admin_trustee]
+ 
+    lookup_field = 'unique_link'  # access form via UUID
+
+    def get_queryset(self):
+        return AdmissionForm.objects.filter(is_active=True)
+    
+    def perform_create(self, serializer):
+        school = School.objects.get(login_id=self.request.user)
+        serializer.save(school=school)
+    
+    def create(self, request, *args, **kwargs):
+        serializer = super().create(request, *args, **kwargs)
+        
+        return Response({
+            "meassage":"Form created Successfully"
+            }, status=status.HTTP_201_CREATED)
+   
+# ====this view set for view admission form field====
+
+class FormFieldViewSet(ModelViewSet):
+    queryset = AdmissionForm.objects.all()
+    serializer_class = AdmissionFormViewSerializer
+# =================================================== 
+    
+    
+class FormSubmissionViewSet(ModelViewSet):
+    queryset = Student.objects.all()
+    serializer_class = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.action in ['list', 'retrieve']:
+            return FormSubmissionReadSerializer
+        return FormSubmissionSerializer
+    
+    def perform_create(self, serializer):  
+        serializer.save(user=self.request.user)
+    
+class FormSubmissionReadView(ModelViewSet):
+    queryset = Student.objects.all()
+    serializer_class = FormSubmissionReadSerializer
+    
+    
+from .razorpay_client import client
+from rest_framework.views import APIView
+
+class RazorpayOrderView(APIView):
+    def post(self, request):
+        # user = request.user
+        amount = int(request.data.get('amount')) * 100
+                
+        admission_fee = AdmissionFee.objects.create(
+            amount=amount / 100,
+        )
+        
+        razor_order = client.order.create({
+            "amount":amount,
+            "currency":"INR",
+            "payment_capture":1
+        })
+        admission_fee.razorpay_order_id = razor_order["id"]
+        admission_fee.save()
+        
+        return Response({
+            "Order_id":razor_order["id"],
+            "Key":settings.RAZOR_PAY_KEY_ID,
+            "amount":razor_order["amount"]
+        })
+        
+
+import hmac
+import hashlib
+from rest_framework import status
+from django.conf import settings
+
+class VerifyPaymentView(APIView):
+    def post(self, request):
+        data = request.data
+
+        order_id = data.get("razorpay_order_id")
+        payment_id = data.get("razorpay_payment_id")
+        signature = data.get("razorpay_signature")
+
+        secret = settings.RAZORPAY_KEY_SECRET
+
+        message = f"{order_id}|{payment_id}"
+
+        generated_signature = hmac.new(
+            secret.encode(),
+            message.encode(),
+            hashlib.sha256
+        ).hexdigest()
+
+        if generated_signature == signature:
+            payment = AdmissionFee.objects.get(razorpay_order_id=order_id)
+
+            payment.razorpay_payment_id = payment_id
+            payment.razorpay_signature = signature
+            payment.status = "paid"
+            payment.save()
+
+            return Response({"status": "success"})
+
+        return Response({"status": "failed"}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+import json
+
+@method_decorator(csrf_exempt, name='dispatch')
+class RazorpayWebhookView(APIView):
+    def post(self, request):
+        payload = request.body
+        signature = request.headers.get("X-Razorpay-Signature")
+
+        secret = settings.RAZORPAY_WEBHOOK_SECRET
+
+        generated_signature = hmac.new(
+            secret.encode(),
+            payload,
+            hashlib.sha256
+        ).hexdigest()
+
+        if generated_signature == signature:
+            data = json.loads(payload)
+
+            if data["event"] == "payment.captured":
+                payment_data = data["payload"]["payment"]["entity"]
+
+                order_id = payment_data["order_id"]
+
+                try:
+                    payment = AdmissionFee.objects.get(razorpay_order_id=order_id)
+                    payment.status = "paid"
+                    payment.save()
+                except AdmissionFee.DoesNotExist:
+                    pass
+
+            return Response({"status": "ok"})
+
+        return Response({"status": "invalid"}, status=400)

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dynamic Form</title>
+
+<style>
+    body {
+        font-family: Arial;
+        background: #f5f5f5;
+        padding: 20px;
+    }
+
+    .container {
+        max-width: 500px;
+        margin: auto;
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+        text-align: center;
+    }
+
+    .field {
+        margin-bottom: 15px;
+    }
+
+    label {
+        font-weight: bold;
+    }
+
+    input {
+        width: 100%;
+        padding: 8px;
+        margin-top: 5px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+    }
+
+    button {
+        width: 100%;
+        padding: 10px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background: #45a049;
+    }
+
+    .success {
+        text-align: center;
+        color: green;
+        margin-top: 10px;
+    }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h2 id="formTitle">Loading...</h2>
+
+    <form id="dynamicForm"></form>
+
+    <div id="message" class="success"></div>
+</div>
+
+<script>
+    const formId = 9;
+
+    fetch(`http://127.0.0.1:8000/form/${formId}/`)
+    .then(res => res.json())
+    .then(data => {
+
+        document.getElementById("formTitle").innerText = data.title;
+        let form = document.getElementById("dynamicForm");
+
+        data.fields.forEach(field => {
+            let div = document.createElement("div");
+            div.classList.add("field");
+
+            let label = document.createElement("label");
+            label.innerText = field.label;
+
+            let input = document.createElement("input");
+
+            if (field.field_type === "text") input.type = "text";
+            else if (field.field_type === "email") input.type = "email";
+            else if (field.field_type === "number") input.type = "number";
+            else input.type = "text";
+
+            // ✅ ALWAYS STRING
+            input.name = String(field.id);
+            input.required = true;
+
+            div.appendChild(label);
+            div.appendChild(input);
+
+            form.appendChild(div);
+        });
+
+        let btn = document.createElement("button");
+        btn.innerText = "Submit";
+        btn.type = "submit";
+        form.appendChild(btn);
+
+        // ✅ SUBMIT
+        form.addEventListener("submit", function(e) {
+            e.preventDefault();
+
+            let formData = {};
+
+            data.fields.forEach(field => {
+                let value = document.getElementsByName(String(field.id))[0].value;
+                formData[String(field.id)] = value;   // 🔥 FIXED
+            });
+
+            console.log("Sending:", formData);
+
+            fetch(`http://127.0.0.1:8000/fillform/${formId}/submit/`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(formData)
+            })
+            console.log("FINAL DATA:", JSON.stringify(formData));
+            .then(res => res.json())
+            .then(result => {
+                console.log("Response:", result);
+                document.getElementById("message").innerText = "Form submitted successfully!";
+                form.reset();
+            })
+            .catch(err => {
+                console.error(err);
+                document.getElementById("message").innerText = "Error submitting form!";
+            });
+        });
+
+    })
+    .catch(err => {
+        console.error(err);
+        document.getElementById("formTitle").innerText = "Error loading form";
+    });
+</script>
+
+</body>
+</html>

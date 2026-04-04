@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Form Builder</title>
+
+<style>
+    body {
+        font-family: Arial;
+        background: #f5f5f5;
+        padding: 20px;
+    }
+
+    .container {
+        max-width: 700px;
+        margin: auto;
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+        text-align: center;
+    }
+
+    input, select {
+        width: 100%;
+        padding: 10px;
+        margin-top: 8px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+    }
+
+    button {
+        padding: 8px 12px;
+        border: none;
+        background: #007bff;
+        color: white;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-top: 5px;
+    }
+
+    .field-box {
+        border: 1px solid #ddd;
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+        background: #fafafa;
+    }
+
+    .preview {
+        margin-top: 30px;
+        padding: 15px;
+        border-top: 2px solid #ddd;
+    }
+
+    .remove-btn {
+        background: red;
+    }
+</style>
+
+</head>
+<body>
+
+<div class="container">
+    <h2>Form Builder</h2>
+
+    <!-- Form Title -->
+    <label>Form Title</label>
+    <input type="text" id="formTitle" placeholder="Enter form title">
+
+    <!-- Email Field (NEW) -->
+    <label>Email (Required)</label>
+    <input type="email" id="emailField" placeholder="Enter Email" required>
+
+    <!-- Dynamic Fields -->
+    <div id="fieldsList"></div>
+
+    <button onclick="addFieldRow()">+ Add Field</button>
+    <br><br>
+
+    <button onclick="generateForm()">Save Form (API)</button>
+
+    <!-- Preview -->
+    <div class="preview" id="preview"></div>
+</div>
+
+<script>
+
+// Add new field row
+function addFieldRow() {
+    let container = document.getElementById("fieldsList");
+
+    let div = document.createElement("div");
+    div.classList.add("field-box");
+
+    div.innerHTML = `
+        <input type="text" placeholder="Field Label" class="field-label">
+
+        <select class="field-type">
+            <option value="text">Text</option>
+            <option value="number">Number</option>
+            <option value="email">Email</option>
+            <option value="date">Date</option>
+        </select>
+
+        <button class="remove-btn" onclick="this.parentElement.remove()">Remove</button>
+    `;
+
+    container.appendChild(div);
+}
+
+
+// Send data to API + Preview
+function generateForm() {
+    let title = document.getElementById("formTitle").value;
+    let email = document.getElementById("emailField").value;
+
+    if (!title) {
+        alert("Please enter form title");
+        return;
+    }
+
+    if (!email) {
+        alert("Email is required");
+        return;
+    }
+
+    let labels = document.querySelectorAll(".field-label");
+    let types = document.querySelectorAll(".field-type");
+
+    let fields = [];
+
+    for (let i = 0; i < types.length; i++) {
+        let label = labels[i].value.trim();
+        let type = types[i].value;
+
+        if (!label) continue;
+
+        fields.push({
+            label: label,
+            field_type: type
+        });
+    }
+
+    if (fields.length === 0) {
+        alert("Add at least one field");
+        return;
+    }
+
+    let data = {
+        title: title,
+        email: email,   // ✅ Email included
+        fields: fields
+    };
+
+    console.log("Sending Data:", data);
+
+    // API CALL
+    fetch("http://127.0.0.1:8000/api/forms/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error("API Error");
+        }
+        return response.json();
+    })
+    .then(res => {
+        console.log("Response:", res);
+        alert("Form Created Successfully!");
+
+        showPreview(data);
+
+        // Reset form
+        document.getElementById("formTitle").value = "";
+        document.getElementById("emailField").value = "";
+        document.getElementById("fieldsList").innerHTML = "";
+    })
+    .catch(err => {
+        console.error(err);
+        alert("Error creating form. Check backend.");
+    });
+}
+
+
+// Preview function
+function showPreview(data) {
+    let html = `<h3>${data.title}</h3><form>`;
+
+    html += `
+        <label>Email</label>
+        <input type="email" placeholder="Enter Email" required /><br><br>
+    `;
+
+    data.fields.forEach(field => {
+        html += `
+            <label>${field.label}</label>
+            <input type="${field.field_type}" placeholder="${field.label}" /><br><br>
+        `;
+    });
+
+    html += `<button type="submit">Submit</button></form>`;
+
+    document.getElementById("preview").innerHTML = html;
+}
+
+</script>
+
+</body>
+</html>
