@@ -355,6 +355,13 @@ import hashlib
 from rest_framework import status
 from django.conf import settings
 
+import hmac
+import hashlib
+from django.conf import settings
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
 class VerifyPaymentView(APIView):
     def post(self, request):
         data = request.data
@@ -363,7 +370,10 @@ class VerifyPaymentView(APIView):
         payment_id = data.get("razorpay_payment_id")
         signature = data.get("razorpay_signature")
 
-        secret = settings.RAZORPAY_KEY_SECRET
+        if not all([order_id, payment_id, signature]):
+            return Response({"error": "Missing payment parameters"}, status=status.HTTP_400_BAD_REQUEST)
+
+        secret = settings.RAZOR_PAY_SECRET_KEY
 
         message = f"{order_id}|{payment_id}"
 
@@ -373,8 +383,11 @@ class VerifyPaymentView(APIView):
             hashlib.sha256
         ).hexdigest()
 
-        if generated_signature == signature:
-            payment = AdmissionFee.objects.get(razorpay_order_id=order_id)
+        if hmac.compare_digest(generated_signature, signature):
+            try:
+                payment = AdmissionFee.objects.get(razorpay_order_id=order_id)
+            except AdmissionFee.DoesNotExist:
+                return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
 
             payment.razorpay_payment_id = payment_id
             payment.razorpay_signature = signature
@@ -396,7 +409,7 @@ class RazorpayWebhookView(APIView):
         payload = request.body
         signature = request.headers.get("X-Razorpay-Signature")
 
-        secret = settings.RAZORPAY_WEBHOOK_SECRET
+        secret = settings.RAZOR_PAY_SECRET_KEY
 
         generated_signature = hmac.new(
             secret.encode(),

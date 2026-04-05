@@ -200,7 +200,7 @@ class AdmissionFee(models.Model):
     razorpay_order_id = models.CharField(max_length=255, blank=True, null=True)
     razorpay_payment_id = models.CharField(max_length=255, blank=True, null=True)
     razorpay_signature = models.CharField(max_length=255, blank=True, null=True)
-
+    
     # Status tracking
     STATUS_CHOICES = [
         ("created", "Created"),
