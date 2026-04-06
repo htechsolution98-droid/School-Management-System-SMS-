@@ -41,6 +41,8 @@ router = DefaultRouter()
 
 router.register(r'SchoolView',SchoolView, basename='SchoolView')
 router.register(r'StaffView',StaffView, basename='StaffView')
+router.register(r'studentSignUp',StudentSignUpView, basename='studentSignUp')
+router.register(r'divisionset',DivisionSetView, basename='divisionset')
 
 # router.register(r'forms', FormViewSet, basename='forms') 
 # router.register(r'FormFillViewSet', FormFillViewSet, basename='FormFillViewSet')
@@ -56,6 +58,8 @@ router.register(r'StudentFIllView', StudentFIllView, basename='StudentFIllView')
 
 # =========admissions process router========
 
+
+router.register(r'schoolclass', SchoolClassView, basename='schoolclass')
 router.register(r'forms', AdmissionFormViewSet, basename='forms')
 
 # api to get fields in AdmissionForm

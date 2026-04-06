@@ -101,7 +101,7 @@ def generate_staff_username(name):
     Staff_username = Staff_name+four_digit
 
     if User.objects.filter(username = Staff_username).exists():
-        return generate_school_code(name)
+        return generate_staff_username(name)
 
     return Staff_username
 
@@ -129,6 +129,11 @@ class Isprincipal(BasePermission):
     def has_permission(self, request, view):
         return request.user and request.user.is_authenticated and \
                request.user.groups.filter(name='PRINCIPAL').exists()
+               
+class Isstudent(BasePermission):
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and \
+               request.user.groups.filter(name='student').exists()
 
 
 
@@ -182,7 +187,13 @@ class StaffView(ModelViewSet):
 
         serializer.save(user = user)
 
-
+class StudentSignUpView(ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = StudentSignUpSerliazer
+    
+    http_method_names = ['post']
+    
+    
 # =============TO ask more=========       
 
 # class FormViewSet(ModelViewSet):
@@ -273,14 +284,22 @@ class FeeVerifyView(ModelViewSet):
     def get_queryset(self):
         return Student.objects.filter(Q(clerk_verified = True) & Q(principle_verified=True))
 
+# =====serializer for School class=====
 
+class SchoolClassView(ModelViewSet):
+    queryset = SchoolClass.objects.all()
+    serializer_class = SchoolClassSerializer
+    
+# ========================================
+    
 # ========= admissions process views ========
 from rest_framework import status
 
 class AdmissionFormViewSet(ModelViewSet):
     queryset = AdmissionForm.objects.all()
     serializer_class = AdmissionFormSerializer
-    permission_classes = [Is_admin_trustee]
+    # permission_classes = [Is_admin_trustee]  
+    
  
     lookup_field = 'unique_link'  # access form via UUID
 
@@ -291,12 +310,13 @@ class AdmissionFormViewSet(ModelViewSet):
         school = School.objects.get(login_id=self.request.user)
         serializer.save(school=school)
     
-    def create(self, request, *args, **kwargs):
-        serializer = super().create(request, *args, **kwargs)
+    # def create(self, request, *args, **kwargs):
+    #     serializer = super().create(request, *args, **kwargs)
         
-        return Response({
-            "meassage":"Form created Successfully"
-            }, status=status.HTTP_201_CREATED)
+    #     return Response({
+    #         "meassage":"Form created Successfully"
+    #         }, status=status.HTTP_201_CREATED)
+   
    
 # ====this view set for view admission form field====
 
@@ -308,7 +328,7 @@ class FormFieldViewSet(ModelViewSet):
     
 class FormSubmissionViewSet(ModelViewSet):
     queryset = Student.objects.all()
-    serializer_class = [IsAuthenticated]
+    serializer_class = [Isstudent]
     
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve']:
@@ -357,6 +377,7 @@ from django.conf import settings
 
 import hmac
 import hashlib
+
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -435,3 +456,8 @@ class RazorpayWebhookView(APIView):
             return Response({"status": "ok"})
 
         return Response({"status": "invalid"}, status=400)
+    
+
+class DivisionSetView(ModelViewSet):
+    queryset =Student.objects.all()
+    serializer_class = DivisionSetSerilaizer

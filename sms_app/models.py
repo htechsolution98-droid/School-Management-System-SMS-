@@ -72,6 +72,47 @@ class Staff(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.category})"
+    
+
+class SchoolClass(models.Model):
+
+    CLASS_CHOICES = (
+        ('nursery', 'Nursery'),
+        ('lkg', 'LKG'),
+        ('ukg', 'UKG'),
+        ('class_1', 'Class 1'),
+        ('class_2', 'Class 2'),
+        ('class_3', 'Class 3'),
+        ('class_4', 'Class 4'),
+        ('class_5', 'Class 5'),
+        ('class_6', 'Class 6'),
+        ('class_7', 'Class 7'),
+        ('class_8', 'Class 8'),
+        ('class_9', 'Class 9'),
+        ('class_10', 'Class 10'),
+        ('class_11', 'Class 11'),
+        ('class_12', 'Class 12'),
+    )
+
+    school_class = models.CharField(
+        max_length=100,
+        choices=CLASS_CHOICES,
+        blank=True,
+        null=True
+    )
+
+    stream = models.JSONField(default=list,blank=True)
+    
+class SchoolClass(models.Model):
+    
+    school_class = models.CharField(
+        max_length=150,
+        blank=True,
+        null=True
+    )
+
+    def __str__(self):
+        return self.school_class
 
 
 import uuid
@@ -85,7 +126,16 @@ class AdmissionForm(models.Model):
     is_active = models.BooleanField(default=True)
     
     fees_enable = models.BooleanField(default=False)
-    fees = models.DecimalField(max_digits=10, decimal_places=2, null=True , blank=True)
+    
+    FEE_TYPE_CHOICES = (
+        ('general', 'General'),
+        ('individual', 'Individual'),
+    )
+    
+    fee_type = models.CharField(max_length=20, choices=FEE_TYPE_CHOICES, null=True, blank=True)
+
+    # Only used when fee_type = general
+    fees = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
     unique_link = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     
@@ -93,6 +143,21 @@ class AdmissionForm(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.school.name}"
+    
+
+    
+class AdmissionFeeStructure(models.Model):
+    admission_form = models.ForeignKey(
+        AdmissionForm,
+        on_delete=models.CASCADE,
+        related_name='fee_structures'
+    )
+
+    class_name = models.ForeignKey(SchoolClass, on_delete=models.CASCADE, null=True,blank=True)  # exaple "Class 1", "CLass 2"
+    fee_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.class_name} - {self.fee_amount}"
     
 class FormSection(models.Model):
     form = models.ForeignKey(
@@ -148,6 +213,9 @@ class Student(models.Model):
     form = models.ForeignKey('AdmissionForm',on_delete=models.CASCADE)
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
 
+    school_class = models.ForeignKey(SchoolClass, on_delete=models.CASCADE, null=True, blank=True)
+    
+    division = models.CharField(max_length=20, null=True,blank=True)
     
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -166,7 +234,6 @@ class Student(models.Model):
     gr_no =  models.CharField(max_length=100, default=None,blank=True, null=True)
 
     
-
 
 class StudentFieldValue(models.Model):
     student = models.ForeignKey(
