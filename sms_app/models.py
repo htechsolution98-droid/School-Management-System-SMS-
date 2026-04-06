@@ -11,7 +11,7 @@ class School(models.Model):
     code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     
 # Contact Info
-    email = models.EmailField(unique=True, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
     phone = models.CharField(max_length=15, null=True, blank=True)
 
 # Address Info
