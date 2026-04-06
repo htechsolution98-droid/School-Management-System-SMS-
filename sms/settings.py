@@ -94,11 +94,16 @@ import os
 
 DATABASES = {
     'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
-        conn_max_age=600
+        default=os.environ.get("DATABASE_URL"),
+        conn_max_age=600,
     )
 }
 
+# 🔥 FORCE SSL PROPERLY
+DATABASES['default']['OPTIONS'] = {
+    'sslmode': 'require',
+    'connect_timeout': 10,
+}
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
@@ -146,6 +151,6 @@ EMAIL_USE_TLS = True
 
 EMAIL_HOST_USER = 'htechsolution98@gmail.com'
 
-EMAIL_HOST_PASSWORD = 'keddyrnwhkelronp'
+EMAIL_HOST_PASSWORD = 'dqkxmapewnozwxrg'
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
