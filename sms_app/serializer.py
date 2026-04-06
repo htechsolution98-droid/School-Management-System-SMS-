@@ -22,11 +22,6 @@ class SchoolSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['code','login_id']
     
-    def validate_email(self, value):
-        if School.objects.filter(email = value).exists():
-            raise serializers.ValidationError("Email is already exists.")
-        
-        return value
 
 
 class StaffSerializer(serializers.ModelSerializer):
