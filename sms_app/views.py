@@ -140,7 +140,7 @@ class Isstudent(BasePermission):
 class SchoolView(ModelViewSet):
     queryset = School.objects.all()
     serializer_class = SchoolSerializer
-    permission_classes = [IsAuthenticated, Is_super_admin]
+    permission_classes = [IsAuthenticated,Is_super_admin]
 
     def perform_create(self, serializer):
         name = serializer.validated_data.get('name')
