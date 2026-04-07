@@ -273,7 +273,15 @@ class Subject(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.division})"
+    
 
+class Syllabus(models.Model):
+    division = models.ForeignKey('Division', on_delete=models.CASCADE, related_name='syllabi')
+    subject = models.ForeignKey('Subject', on_delete=models.CASCADE, related_name='syllabi')
+    syllabus_file = models.FileField(upload_to='syllabus/')
+    
+    def __str__(self):
+        return f"{self.division} - {self.subject}"
 
 class AdmissionFee(models.Model):
     # student = models.ForeignKey("Student", on_delete=models.CASCADE)
@@ -304,3 +312,12 @@ class AdmissionFee(models.Model):
     # timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
+    
+class AssignClass(models.Model):
+    teacher = models.ForeignKey(Staff, on_delete=models.CASCADE, null= True, blank=True)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, null= True, blank=True)
+    division = models.ForeignKey(Division, on_delete=models.CASCADE, null= True, blank=True)
+    is_class_teacher = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.teacher} - {self.subject} - {self.division}"

@@ -530,6 +530,11 @@ class SetSubjectView(ModelViewSet):
     serializer_class = SetSubjectSerializer
     
 
+class SyllabusView(ModelViewSet):
+    queryset = Syllabus.objects.all()
+    serializer_class = SyllabusSerializer
 
 
-   
+class AssignClassView(ModelViewSet):
+    queryset = AssignClass.objects.all()
+    serializer_class = AssignClassSerializer

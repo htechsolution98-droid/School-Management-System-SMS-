@@ -410,4 +410,14 @@ class SetSubjectSerializer(serializers.ModelSerializer):
         model = Subject
         fields = '__all__'
         
-        
+class SyllabusSerializer(serializers.ModelSerializer):
+    
+    class Meta:
+        model = Syllabus
+        fields = '__all__'
+
+
+class AssignClassSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssignClass
+        fields = '__all__'

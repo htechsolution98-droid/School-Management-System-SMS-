@@ -21,10 +21,14 @@ from rest_framework.routers import DefaultRouter
 from sms_app.views import *
 from django.urls import include
 from django.views.generic import TemplateView
+
 from django.urls import path, re_path
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+
+from django.conf import settings
+from django.conf.urls.static import static
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -57,13 +61,13 @@ router.register(r'StudentFIllView', StudentFIllView, basename='StudentFIllView')
 
 # =========admissions process router========
 
-router.register(r'schoolclass', SchoolClassView, basename='schoolclass')
+router.register(r'schoolclass', SchoolClassView, basename='schoolclass') #also use for get class data on divisionSet and submissions  drop down 
 router.register(r'divisionSet', SetDivisionView, basename='divisionSet')
 
 router.register(r'forms', AdmissionFormViewSet, basename='forms')
 
 # api to get fields in AdmissionForm
-router.register(r'fields', FormFieldViewSet, basename='fields')
+router.register(r'fields', FormFieldViewSet, basename='fields') #to retrive fields of admission form that added by principle
 
 # ===== api for form submission =====
 router.register(r'submissions', FormSubmissionViewSet, basename='submissions')
@@ -78,6 +82,8 @@ router.register(r'ClerkVerify', ClerkVerifyView, basename='ClerkVerifyView')
 router.register(r'PrincipleVerifyView', PrincipleVerifyView, basename='PrincipleVerifyView')
 router.register(r'FeeVerifyView', FeeVerifyView, basename='FeeVerifyView')
 router.register(r'setSubject', SetSubjectView, basename='setSubject')
+router.register(r'Syllabus', SyllabusView, basename='Syllabus')
+router.register(r'assignClass', AssignClassView, basename='assignClass')
 
 
 # =====set subject serializers=====
@@ -112,5 +118,5 @@ urlpatterns = [
     re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0)),
 
     
-]
+]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
  
