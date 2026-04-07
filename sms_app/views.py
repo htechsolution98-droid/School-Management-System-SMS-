@@ -163,6 +163,13 @@ class SchoolView(ModelViewSet):
             # )
 
             serializer.save(code=school_code, login_id=user)
+            
+    def create(self, request, *args, **kwargs):
+        serializer = super().create(request, *args, **kwargs)
+        
+        return Response({
+            "meassage":"School created Successfully"
+            }, status=status.HTTP_201_CREATED)
 
 
 
