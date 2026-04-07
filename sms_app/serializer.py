@@ -349,9 +349,15 @@ class FormSubmissionReadSerializer(serializers.ModelSerializer):
         model = Student
         fields = ['id', 'created_at', 'field_values']
         
-
+# Only for Post method    
+class SetDivisionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Division
+        fields = ['SchoolClass','division','capacity']
+        
 
 # =========serializers for set division by clerk========
+# NOT IN USE
 import string
 class DivisionSetSerilaizer(serializers.ModelSerializer):
     capacity =  serializers.IntegerField(write_only = True)
@@ -386,7 +392,7 @@ class ClerkVerifySerializr(serializers.ModelSerializer):
 
     class Meta:
         model = Student
-        fields = ['clerk_verified','clerk_verified_at','field_values']
+        fields = '__all__'
 
 
 
@@ -397,3 +403,11 @@ class PrincipleVerifySerializr(serializers.ModelSerializer):
         fields = ['principle_verified','principle_verified_at','field_values']
        
 
+# =======set subject serializers========
+
+class SetSubjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subject
+        fields = '__all__'
+        
+        

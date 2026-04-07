@@ -42,7 +42,6 @@ router = DefaultRouter()
 router.register(r'SchoolView',SchoolView, basename='SchoolView')
 router.register(r'StaffView',StaffView, basename='StaffView')
 router.register(r'studentSignUp',StudentSignUpView, basename='studentSignUp')
-router.register(r'divisionset',DivisionSetView, basename='divisionset')
 
 # router.register(r'forms', FormViewSet, basename='forms') 
 # router.register(r'FormFillViewSet', FormFillViewSet, basename='FormFillViewSet')
@@ -58,8 +57,9 @@ router.register(r'StudentFIllView', StudentFIllView, basename='StudentFIllView')
 
 # =========admissions process router========
 
-
 router.register(r'schoolclass', SchoolClassView, basename='schoolclass')
+router.register(r'divisionSet', SetDivisionView, basename='divisionSet')
+
 router.register(r'forms', AdmissionFormViewSet, basename='forms')
 
 # api to get fields in AdmissionForm
@@ -73,17 +73,19 @@ router.register(r'StudentDataview', FormSubmissionReadView, basename='StudentDat
 
 
 # =====verify api=====
-router.register(r'ClerkVerifyView', ClerkVerifyView, basename='ClerkVerifyView')
+router.register(r'ClerkVerify', ClerkVerifyView, basename='ClerkVerifyView')
+
 router.register(r'PrincipleVerifyView', PrincipleVerifyView, basename='PrincipleVerifyView')
 router.register(r'FeeVerifyView', FeeVerifyView, basename='FeeVerifyView')
+router.register(r'setSubject', SetSubjectView, basename='setSubject')
 
 
-
+# =====set subject serializers=====
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/',include(router.urls)),
-    path('api/access/',TokenObtainPairView.as_view()),  
-    
+    path('api/access/',CustomLoginView.as_view()),  
+        
     path('api/refresh/',TokenRefreshView.as_view()),
     
     path('form_page/', TemplateView.as_view(template_name = 'add_form.html')),
@@ -111,3 +113,4 @@ urlpatterns = [
 
     
 ]
+ 

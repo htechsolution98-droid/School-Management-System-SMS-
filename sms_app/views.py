@@ -140,7 +140,7 @@ class Isstudent(BasePermission):
 class SchoolView(ModelViewSet):
     queryset = School.objects.all()
     serializer_class = SchoolSerializer
-    # permission_classes = [IsAuthenticated, Is_super_admin]
+    permission_classes = [IsAuthenticated, Is_super_admin]
 
     def perform_create(self, serializer):
         name = serializer.validated_data.get('name')
@@ -155,12 +155,12 @@ class SchoolView(ModelViewSet):
             group , create= Group.objects.get_or_create(name = 'admin(trustee)')
             user.groups.add(group)
 
-            send_mail(
-                subject="School Login Details",
-                message=f"Username: {school_code}\nPassword: {password}",
-                from_email=settings.EMAIL_HOST_USER,
-                recipient_list=[serializer.validated_data.get('email')],
-            )
+            # send_mail(
+            #     subject="School Login Details",
+            #     message=f"Username: {school_code}\nPassword: {password}",
+            #     from_email=settings.EMAIL_HOST_USER,
+            #     recipient_list=[serializer.validated_data.get('email')],
+            # )
 
             serializer.save(code=school_code, login_id=user)
 
@@ -457,7 +457,79 @@ class RazorpayWebhookView(APIView):
 
         return Response({"status": "invalid"}, status=400)
     
-
+# NOT IN USE 
 class DivisionSetView(ModelViewSet):
     queryset =Student.objects.all()
     serializer_class = DivisionSetSerilaizer
+
+# Only for Post method  
+class SetDivisionView(ModelViewSet):
+    queryset = Division.objects.all()
+    serializer_class = SetDivisionSerializer
+    
+    def create(self, request, *args, **kwargs):
+        division_count = int(request.data.get('division'))
+        school_class = request.data.get('SchoolClass')
+        capacity = request.data.get('capacity')
+
+        alphabet = list(string.ascii_uppercase[:division_count])
+
+        divisions = []
+        for a in alphabet:
+            obj = Division.objects.create(
+                SchoolClass_id=school_class,  # if FK
+                division=a,
+                capacity=capacity
+            )
+            divisions.append(obj)
+
+        serializer = self.get_serializer(divisions, many=True)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+# This Logic perfom with button after admission and complete and division is set    
+@transaction.atomic
+def assign_student_divisions():
+    # Get all classes
+    classes = SchoolClass.objects.all()
+
+    for school_class in classes:
+        # Get divisions for this class
+        divisions = list(
+            Division.objects.filter(school_class=school_class).order_by('id')
+        )
+
+        # Skip if no divisions exist
+        if not divisions:
+            print(f"Skipping {school_class} (no divisions found)")
+            continue
+
+        division_len = len(divisions)
+
+        # Get students of this class
+        students = list(
+            Student.objects.filter(school_class=school_class).order_by('created_at')
+        )
+
+        if not students:
+            print(f"No students in {school_class}")
+            continue
+
+        # Optional: shuffle students for random distribution
+        # random.shuffle(students)
+
+        # Assign divisions (round-robin)
+        for index, student in enumerate(students):
+            student.division = divisions[index % division_len]
+
+        # Bulk update for performance
+        Student.objects.bulk_update(students, ['division'])
+# ==================================================================
+
+class SetSubjectView(ModelViewSet):
+    queryset = Subject.objects.all()
+    serializer_class = SetSubjectSerializer
+    
+
+
+
+   

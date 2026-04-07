@@ -114,6 +114,14 @@ class SchoolClass(models.Model):
     def __str__(self):
         return self.school_class
 
+class Division(models.Model):
+    SchoolClass = models.ForeignKey(SchoolClass, on_delete=models.CASCADE)
+    division = models.CharField(null= True, blank=True)
+    capacity = models.IntegerField(null=True, blank=True)
+     
+
+    def __str__(self):
+        return f"{self.SchoolClass} ({self.division})"
 
 import uuid
 
@@ -254,6 +262,17 @@ class StudentFieldValue(models.Model):
 
     def __str__(self):
         return f"{self.student.email} - {self.field.label}"
+
+class Subject(models.Model):
+    name = models.CharField(max_length=100)
+    division = models.ForeignKey(
+        Division, 
+        on_delete=models.CASCADE, 
+        related_name='subjects'
+    )
+
+    def __str__(self):
+        return f"{self.name} ({self.division})"
 
 
 class AdmissionFee(models.Model):
