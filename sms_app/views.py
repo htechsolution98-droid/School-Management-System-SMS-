@@ -305,7 +305,7 @@ from rest_framework import status
 class AdmissionFormViewSet(ModelViewSet):
     queryset = AdmissionForm.objects.all()
     serializer_class = AdmissionFormSerializer
-    # permission_classes = [Is_admin_trustee]  
+    # permission_classes = [IsAuthenticated,Isprincipal]  
     
  
     lookup_field = 'unique_link'  # access form via UUID
@@ -315,7 +315,7 @@ class AdmissionFormViewSet(ModelViewSet):
     
     def perform_create(self, serializer):
         school = School.objects.get(login_id=self.request.user)
-        serializer.save(school=school)
+        serializer.save(school=school.id)
     
     # def create(self, request, *args, **kwargs):
     #     serializer = super().create(request, *args, **kwargs)

@@ -223,6 +223,9 @@ class FormSectionSerializer(serializers.ModelSerializer):
         
 # ===========fee structure serializer============
 class AdmissionFeeStructureSerializer(serializers.ModelSerializer):
+    class_name = serializers.PrimaryKeyRelatedField(
+        queryset=SchoolClass.objects.all()
+    )
     class Meta:
         model = AdmissionFeeStructure
         fields = ['class_name', 'fee_amount']  
