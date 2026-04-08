@@ -56,7 +56,10 @@ router.register(r'studentSignUp',StudentSignUpView, basename='studentSignUp')
 
 # both api use togather when student form fill
 router.register(r'StudentFIllView', StudentFIllView, basename='StudentFIllView')
+
 # router.register(r'StudentDocumentview', StudentDocumentview, basename='StudentDocumentview')
+
+# router.register(r'documentField', DocumentFieldview, basename='documentField') # fro for
 
 
 # =========admissions process router========
@@ -80,7 +83,9 @@ router.register(r'StudentDataview', FormSubmissionReadView, basename='StudentDat
 router.register(r'ClerkVerify', ClerkVerifyView, basename='ClerkVerifyView')
 
 router.register(r'PrincipleVerifyView', PrincipleVerifyView, basename='PrincipleVerifyView')
+
 router.register(r'FeeVerifyView', FeeVerifyView, basename='FeeVerifyView')
+
 router.register(r'setSubject', SetSubjectView, basename='setSubject')
 router.register(r'Syllabus', SyllabusView, basename='Syllabus')
 router.register(r'assignClass', AssignClassView, basename='assignClass')

@@ -226,6 +226,9 @@ class FormSectionSerializer(serializers.ModelSerializer):
         model = FormSection
         fields = ['id', 'title', 'order', 'fields']
         
+        
+
+        
 # ===========fee structure serializer============
 class AdmissionFeeStructureSerializer(serializers.ModelSerializer):
     class_name = serializers.PrimaryKeyRelatedField(
@@ -236,19 +239,36 @@ class AdmissionFeeStructureSerializer(serializers.ModelSerializer):
         fields = ['class_name', 'fee_amount']  
 # =================================================
 
+class DocumentFieldSerializer(serializers.ModelSerializer):
+    document_field = serializers.CharField(write_only =True)
+    class Meta:
+        model = DocumentField
+        fields = ['document_field']
+        read_only_fields = ['form_id','school','created_at']
+        
+
 class AdmissionFormSerializer(serializers.ModelSerializer):
     sections = FormSectionSerializer(many=True)
+    document_field = serializers.ListField(child=serializers.CharField(),required=False)
+    
     fee_structures = AdmissionFeeStructureSerializer(many=True, required=False)
      
-    related_name='fields'
+    # related_name='fields'
     class Meta:
         model = AdmissionForm
-        fields = ['id','fees_enable','fees','title', 'description', 'unique_link','sections','fee_type','fee_structures']
+        fields = ['id','fees_enable','fees','title', 'description', 'unique_link','sections','fee_type','fee_structures','document_field']
 
     def create(self, validated_data):
+        document_field = validated_data.pop('document_field',[])
         sections_data = validated_data.pop('sections')
         fee_data = validated_data.pop('fee_structures',[])
-        form = AdmissionForm.objects.create(**validated_data)
+        validated_data.pop('school')
+        school = self.context['request'].user.school 
+        school = self.context['request'].user.school
+        if not school:
+            raise serializers.ValidationError("User does not have a school assigned")
+        
+        form = AdmissionForm.objects.create(school = school, **validated_data)
 
         for section_data in sections_data:
             fields_data = section_data.pop('fields')
@@ -257,7 +277,10 @@ class AdmissionFormSerializer(serializers.ModelSerializer):
             for field_data in fields_data:
                 FormField.objects.create(section=section, **field_data)
                 
-                
+        
+        for label in document_field:
+            DocumentField.objects.create(form_id = form,school = school,label=label)
+            
         if form.fee_type == 'individual':
             for fee in fee_data:
                 AdmissionFeeStructure.objects.create(

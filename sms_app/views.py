@@ -145,7 +145,7 @@ from rest_framework.permissions import IsAuthenticated
 class SchoolView(ModelViewSet):
     queryset = School.objects.all()
     serializer_class = SchoolSerializer
-    permission_classes = [IsAuthenticated, Is_super_admin]
+    permission_classes = [IsAuthenticated]
 
     # 🔹 Get schools with cache
     def get_queryset(self):
@@ -177,7 +177,7 @@ class SchoolView(ModelViewSet):
     def perform_create(self, serializer):
         name = serializer.validated_data.get('name')
         school_code = generate_school_code(name)
-
+        
         with transaction.atomic():
             user = User.objects.create(username=school_code)
             password = school_code
@@ -187,7 +187,9 @@ class SchoolView(ModelViewSet):
             group, created = Group.objects.get_or_create(name='admin(trustee)')
             user.groups.add(group)
 
-            serializer.save(code=school_code, login_id=user)
+            school = serializer.save(code=school_code, login_id=user)
+            user.school = school
+            user.save()
 
         #  Clear cache after create
         cache.delete("school_list")
@@ -241,6 +243,7 @@ class StaffView(ModelViewSet):
         username = generate_staff_username(name)
 
         user = User(username=username)
+        user.school = self.request.user.school
         user.set_password(username)
         user.save()
 
@@ -371,10 +374,19 @@ class SchoolClassView(ModelViewSet):
 # ========= admissions process views ========
 from rest_framework import status
 
+# ========= using this serializers principle set DocumentField=========
+
+class DocumentFieldview(ModelViewSet):
+    queryset = DocumentField.objects.all()
+    serializer_class = DocumentFieldSerializer
+    
+# =====================================================================
+
+
 class AdmissionFormViewSet(ModelViewSet):
     queryset = AdmissionForm.objects.all()
     serializer_class = AdmissionFormSerializer
-    # permission_classes = [IsAuthenticated,Isprincipal]  
+    permission_classes = [IsAuthenticated]  
     
  
     lookup_field = 'unique_link'  # access form via UUID
@@ -383,9 +395,9 @@ class AdmissionFormViewSet(ModelViewSet):
         return AdmissionForm.objects.filter(is_active=True)
     
     def perform_create(self, serializer):
-        school = School.objects.get(login_id=self.request.user)
-        serializer.save(school=school.id)
-    
+        serializer.save(school=self.request.user.school)
+        print(self.request.user)
+     
     # def create(self, request, *args, **kwargs):
     #     serializer = super().create(request, *args, **kwargs)
         

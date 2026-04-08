@@ -212,6 +212,7 @@ class Student(models.Model):
     gr_no =  models.CharField(max_length=100, default=None,blank=True, null=True)
 
 
+
 class StudentFieldValue(models.Model):
 
     school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
@@ -225,6 +226,52 @@ class StudentFieldValue(models.Model):
     def __str__(self):
         return f"{self.student} - {self.field.label}"
 
+class DocumentField(models.Model):
+    form_id = models.ForeignKey('AdmissionForm', on_delete=models.CASCADE, null=True, blank=True)
+    
+    school = models.ForeignKey(
+        'School',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='document_fields'   # ✅ changed
+    )
+
+    label = models.CharField(max_length=255, null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.label if self.label else "Student Document"
+
+
+class DocumentFile(models.Model):
+    form_id = models.ForeignKey('AdmissionForm', on_delete=models.CASCADE, null=True, blank=True)
+
+    school = models.ForeignKey(
+        'School',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='document_files'   # ✅ changed
+    )
+
+    label = models.ForeignKey('DocumentField', on_delete=models.CASCADE, null=True, blank=True)
+
+    document = models.FileField(upload_to='student_documents/', null=True, blank=True)
+
+    student = models.ForeignKey(
+        'Student',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='documents'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.label.label if self.label else "Student Document"
 
 class Subject(models.Model):
 
