@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>API Data List</title>
+</head>
+<body>
+
+    <h2>Student List</h2>
+
+    <!-- Include container -->
+    <div id="student-list"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+<script>
+// Step 1: Include HTML file
+async function includeHTML() {
+    const element = document.getElementById("student-list");
+    const response = await fetch("list.html");
+    const html = await response.text();
+    element.innerHTML = html;
+
+    // After include, load data
+    loadData();
+}
+// Include HTML
+async function includeHTML() {
+    const element = document.getElementById("student-list");
+    const response = await fetch("list.html");
+    const html = await response.text();
+    element.innerHTML = html;
+
+   // call API after include
+}
+
+// Fetch API WITH COOKIE
+async function loadData() {
+    try {
+        const response = await fetch("http://127.0.0.1:8000/api/SchoolView/", {
+            method: "GET",
+            credentials: "include"   // 🔥 VERY IMPORTANT
+        });
+
+        const data = await response.json();
+
+        const container = document.getElementById("list-container");
+
+        data.forEach(student => {
+            const li = document.createElement("li");
+            li.textContent = student.name;
+            container.appendChild(li);
+        });
+
+    } catch (error) {
+        console.error("Error:", error);
+    }
+}
+ loadData(); 
+
+{% comment %} includeHTML(); {% endcomment %}
+</script>

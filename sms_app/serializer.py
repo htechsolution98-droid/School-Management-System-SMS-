@@ -4,6 +4,10 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 import random
 from django.contrib.auth.models import Group
 
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
 def generate_student_username(name):
     Staff_name = name.split(' ')[0]
     digit = string.digits
@@ -42,7 +46,8 @@ class StaffSerializer(serializers.ModelSerializer):
     class Meta:
         model = Staff
         fields = '__all__'
-        read_only_fields = ['user']
+        read_only_fields = ['user','school']
+        
     def validate_email(self, value):
         if School.objects.filter(email= value).exists():
             raise serializers.ValidationError("Email is already exists.")

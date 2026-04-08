@@ -76,10 +76,21 @@ TEMPLATES = [
     },
 ]
 
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
 
 
 WSGI_APPLICATION = "sms.wsgi.application"
 
+
+AUTH_USER_MODEL = 'sms_app.CustomUser' # for custom USer
 
 
 REST_FRAMEWORK = {

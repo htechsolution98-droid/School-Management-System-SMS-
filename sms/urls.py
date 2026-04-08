@@ -90,7 +90,7 @@ router.register(r'assignClass', AssignClassView, basename='assignClass')
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/',include(router.urls)),
-    path('api/access/',CustomLoginView.as_view()),  
+    path('api/access/',TokenObtainPairView.as_view()),  
         
     path('api/refresh/',TokenRefreshView.as_view()),
     
@@ -106,8 +106,10 @@ urlpatterns = [
     path('payment/verify/',VerifyPaymentView.as_view()),
     path('webhook/',RazorpayWebhookView.as_view()),
     
-    path('payment/',TemplateView.as_view(template_name='payment.html')),
     
+    path('payment/',TemplateView.as_view(template_name='payment.html')),
+    path('log/',TemplateView.as_view(template_name='login.html')),
+    path('in/',TemplateView.as_view(template_name='index.html')),
      # Swagger UI
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0)),
 

@@ -6,7 +6,7 @@ from rest_framework.permissions import BasePermission ,IsAuthenticated
 import random
 import string
 from django.core.mail import send_mail
-from django.contrib.auth.models import User,Group
+from django.contrib.auth.models import Group
 
 from django.conf import settings
 from django.db import transaction
@@ -18,34 +18,34 @@ from rest_framework.response import Response
 from django.db.models import Q
 
 from rest_framework_simplejwt.views import TokenObtainPairView
+from django.contrib.auth import get_user_model
 
+User = get_user_model()
 # Create your views here.
 # set access and refresh token in cookie 
-
 class CustomLoginView(TokenObtainPairView):
     serializer_class = CustomeLoginSerializer
 
-    
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
-        
+
         if response.status_code == 200:
-            access = response.data.pop('access',None)
-            refresh = response.data.pop('refresh',None)
-            
+            access = response.data.pop('access', None)
+            refresh = response.data.pop('refresh', None)
+
             response.set_cookie(
                 key='access_token',
                 value=access,
                 httponly=True,
-                secure=False, # when want to use with https make it True
+                secure=False,  # True in production (HTTPS)
                 samesite='Lax'
             )
-            
+
             response.set_cookie(
                 key='refresh_token',
                 value=refresh,
                 httponly=True,
-                secure=False,# when want to use with https make it True
+                secure=False,
                 samesite='Lax'
             )
 
@@ -136,12 +136,44 @@ class Isstudent(BasePermission):
                request.user.groups.filter(name='student').exists()
 
 
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.response import Response
+from django.core.cache import cache
+from django.db import transaction
+from rest_framework.permissions import IsAuthenticated
 
 class SchoolView(ModelViewSet):
     queryset = School.objects.all()
     serializer_class = SchoolSerializer
-    permission_classes = [IsAuthenticated,Is_super_admin]
+    permission_classes = [IsAuthenticated, Is_super_admin]
 
+    # 🔹 Get schools with cache
+    def get_queryset(self):
+        cache_key = "school_list"
+
+        data = cache.get(cache_key)
+
+        if not data:
+            qs = School.objects.all()
+            return qs
+
+    # # 🔹 Override list to cache serialized data (BEST PRACTICE)
+    # def list(self, request, *args, **kwargs):
+    #     cache_key = "school_list"
+
+    #     data = cache.get(cache_key)
+
+    #     if not data:
+    #         queryset = School.objects.all()
+    #         serializer = self.get_serializer(queryset, many=True)
+    #         data = serializer.data
+    #         cache.set(cache_key, data, timeout=60 * 10)  # 10 minutes
+
+    #     response = Response(data)
+    #      # 👈 check in Postman
+    #     return response
+
+    # Create school + clear cache
     def perform_create(self, serializer):
         name = serializer.validated_data.get('name')
         school_code = generate_school_code(name)
@@ -151,48 +183,85 @@ class SchoolView(ModelViewSet):
             password = school_code
             user.set_password(password)
             user.save()
-            
-            group , create= Group.objects.get_or_create(name = 'admin(trustee)')
+
+            group, created = Group.objects.get_or_create(name='admin(trustee)')
             user.groups.add(group)
 
-            # send_mail(
-            #     subject="School Login Details",
-            #     message=f"Username: {school_code}\nPassword: {password}",
-            #     from_email=settings.EMAIL_HOST_USER,
-            #     recipient_list=[serializer.validated_data.get('email')],
-            # )
-
             serializer.save(code=school_code, login_id=user)
-            
+
+        #  Clear cache after create
+        cache.delete("school_list")
+
+    # 🔹 Update + clear cache
+    def perform_update(self, serializer):
+        serializer.save()
+        cache.delete("school_list")
+
+    # 🔹 Delete + clear cache
+    def perform_destroy(self, instance):
+        instance.delete()
+        cache.delete("school_list")
+
+    # 🔹 Custom response
     def create(self, request, *args, **kwargs):
-        serializer = super().create(request, *args, **kwargs)
-        
+        super().create(request, *args, **kwargs)
         return Response({
-            "meassage":"School created Successfully"
-            }, status=status.HTTP_201_CREATED)
+            "message": "School created Successfully"
+        }, status=201)
 
-
+from django.core.cache import cache
 
 class StaffView(ModelViewSet):
     queryset = Staff.objects.all()
     serializer_class = StaffSerializer
-    permission_classes = [IsAuthenticated,Is_admin_trustee]
+    permission_classes = [IsAuthenticated, Is_admin_trustee]
 
+    # 🔹 Get staff list with Redis cache
+    def get_queryset(self):
+        user = self.request.user
+        cache_key = f"staff_list_{user.id}"
+
+        staff_qs = cache.get(cache_key)
+        if staff_qs:
+            print("its form cach")
+
+        if not staff_qs:
+            staff_qs = Staff.objects.filter(school__login_id=user)
+            cache.set(cache_key, staff_qs, timeout=60 * 60 * 5)  # 5 hours cache
+
+        return staff_qs
+
+    # 🔹 Create staff + clear cache
     def perform_create(self, serializer):
         name = serializer.validated_data.get('name')
-        
         category = serializer.validated_data.get('category')
 
         group, created = Group.objects.get_or_create(name=category)
 
         username = generate_staff_username(name)
+
         user = User(username=username)
         user.set_password(username)
         user.save()
 
         user.groups.add(group)
 
-        serializer.save(user = user)
+        school = School.objects.filter(login_id=self.request.user).first()
+
+        serializer.save(user=user, school=school)
+
+        # 🔥 Clear cache after create
+        cache.delete(f"staff_list_{self.request.user.id}")
+
+    # 🔹 Update staff + clear cache
+    def perform_update(self, serializer):
+        serializer.save()
+        cache.delete(f"staff_list_{self.request.user.id}")
+
+    # 🔹 Delete staff + clear cache
+    def perform_destroy(self, instance):
+        instance.delete()
+        cache.delete(f"staff_list_{self.request.user.id}")
 
 class StudentSignUpView(ModelViewSet):
     queryset = User.objects.all()
@@ -200,7 +269,7 @@ class StudentSignUpView(ModelViewSet):
     
     http_method_names = ['post']
     
-    
+
 # =============TO ask more=========       
 
 # class FormViewSet(ModelViewSet):

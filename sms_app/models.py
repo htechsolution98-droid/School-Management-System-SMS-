@@ -1,47 +1,39 @@
 from django.db import models
-from django.contrib.auth.models import User
+import uuid
+from django.contrib.auth.models import AbstractUser
 
-# Create your models here.
+from django.conf import settings
+
 
 class School(models.Model):
 
-    login_id = models.ForeignKey(User,on_delete=models.CASCADE)
+    login_id = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.CASCADE,related_name='schools')
 
     name = models.CharField(max_length=255, null=True, blank=True)
     code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     
-# Contact Info
     email = models.EmailField(null=True, blank=True)
     phone = models.CharField(max_length=15, null=True, blank=True)
 
-# Address Info
     address = models.TextField(null=True, blank=True)
     city = models.CharField(max_length=100, null=True, blank=True)
     state = models.CharField(max_length=100, null=True, blank=True)
     country = models.CharField(max_length=100, null=True, blank=True)
     pincode = models.CharField(max_length=10, null=True, blank=True)
 
-# School Details
-    # established_year = models.PositiveIntegerField(null=True, blank=True)
-    # board = models.CharField(max_length=100, null=True, blank=True)
-    # website = models.URLField(null=True, blank=True)
-
-# Admin Info
-    # principal_name = models.CharField(max_length=255, null=True, blank=True)
-    # total_students = models.PositiveIntegerField(null=True, blank=True)
-    # total_teachers = models.PositiveIntegerField(null=True, blank=True)
-
-# Status & Timestamps
     is_active = models.BooleanField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
 
     def __str__(self):
         return self.name
-    
 
-    
+class CustomUser(AbstractUser):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True,  related_name='users' )
+
 class Staff(models.Model):
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
 
     STAFF_CATEGORIES = [
         ('TEACHER', 'Teacher'),
@@ -51,10 +43,9 @@ class Staff(models.Model):
         ('PRINCIPAL', 'Principal'),
         ('TRANSOPORTATION', 'Transportation '),
         ('INVENTORY', 'Inventory '),
-        
     ]
 
-    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=100, null=True, blank=True)
     email = models.EmailField(unique=True, null=True, blank=True)
     phone_number = models.CharField(max_length=15, null=True, blank=True)
@@ -76,6 +67,8 @@ class Staff(models.Model):
 
 class SchoolClass(models.Model):
 
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+
     CLASS_CHOICES = (
         ('nursery', 'Nursery'),
         ('lkg', 'LKG'),
@@ -94,95 +87,84 @@ class SchoolClass(models.Model):
         ('class_12', 'Class 12'),
     )
 
-    school_class = models.CharField(
-        max_length=100,
-        choices=CLASS_CHOICES,
-        blank=True,
-        null=True
-    )
-
+    school_class = models.CharField(max_length=100, choices=CLASS_CHOICES, blank=True, null=True)
     stream = models.JSONField(default=list,blank=True)
     
+
 class SchoolClass(models.Model):
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
     
-    school_class = models.CharField(
-        max_length=150,
-        blank=True,
-        null=True
-    )
+    school_class = models.CharField(max_length=150, blank=True, null=True)
 
     def __str__(self):
         return self.school_class
 
+
 class Division(models.Model):
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+
     SchoolClass = models.ForeignKey(SchoolClass, on_delete=models.CASCADE)
     division = models.CharField(null= True, blank=True)
     capacity = models.IntegerField(null=True, blank=True)
      
-
     def __str__(self):
         return f"{self.SchoolClass} ({self.division})"
 
-import uuid
-
 
 class AdmissionForm(models.Model):
-    school = models.ForeignKey('School', on_delete=models.CASCADE, related_name='admission_forms')
+    school = models.ForeignKey('School', on_delete=models.CASCADE, related_name='admission_forms', db_index=True)
+
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     
     is_active = models.BooleanField(default=True)
-    
     fees_enable = models.BooleanField(default=False)
-    
+
     FEE_TYPE_CHOICES = (
         ('general', 'General'),
         ('individual', 'Individual'),
     )
     
     fee_type = models.CharField(max_length=20, choices=FEE_TYPE_CHOICES, null=True, blank=True)
-
-    # Only used when fee_type = general
     fees = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
     unique_link = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.title} - {self.school.name}"
     
 
-    
 class AdmissionFeeStructure(models.Model):
-    admission_form = models.ForeignKey(
-        AdmissionForm,
-        on_delete=models.CASCADE,
-        related_name='fee_structures'
-    )
 
-    class_name = models.ForeignKey(SchoolClass, on_delete=models.CASCADE, null=True,blank=True)  # exaple "Class 1", "CLass 2"
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+
+    admission_form = models.ForeignKey(AdmissionForm, on_delete=models.CASCADE, related_name='fee_structures')
+    class_name = models.ForeignKey(SchoolClass, on_delete=models.CASCADE, null=True,blank=True)
     fee_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     def __str__(self):
         return f"{self.class_name} - {self.fee_amount}"
     
-class FormSection(models.Model):
-    form = models.ForeignKey(
-        'AdmissionForm',
-        on_delete=models.CASCADE,
-        related_name='sections'
-    )
 
-    title = models.CharField(max_length=255)  # e.g. "Personal Details"
+class FormSection(models.Model):
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+
+    form = models.ForeignKey('AdmissionForm', on_delete=models.CASCADE, related_name='sections')
+    title = models.CharField(max_length=255)
     order = models.PositiveIntegerField()
 
     def __str__(self):
         return self.title
     
-    
 
 class FormField(models.Model):
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+
     FIELD_TYPES = [
         ('text', 'Text'),
         ('number', 'Number'),
@@ -193,36 +175,25 @@ class FormField(models.Model):
         ('radio', 'Radio'),
     ]
 
-    section = models.ForeignKey(
-        'FormSection',
-        on_delete=models.CASCADE,
-        related_name='fields'
-    )
-
-    label = models.CharField(max_length=255)  # e.g., "Student Name"
-    
-    field_type = models.CharField(
-        max_length=20,
-        choices=FIELD_TYPES
-    )
-
+    section = models.ForeignKey('FormSection', on_delete=models.CASCADE, related_name='fields')
+    label = models.CharField(max_length=255)
+    field_type = models.CharField(max_length=20, choices=FIELD_TYPES)
     is_required = models.BooleanField(default=False)
-
-    options = models.JSONField(blank=True, null=True)  
-    # Example: ["A", "B", "C"]
-
+    options = models.JSONField(blank=True, null=True)
     order = models.PositiveIntegerField()
 
     def __str__(self):
         return f"{self.label} ({self.field_type})"
     
+
 class Student(models.Model):
-    # Status
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+
     form = models.ForeignKey('AdmissionForm',on_delete=models.CASCADE)
-    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
 
     school_class = models.ForeignKey(SchoolClass, on_delete=models.CASCADE, null=True, blank=True)
-    
     division = models.CharField(max_length=20, null=True,blank=True)
     
     is_active = models.BooleanField(default=True)
@@ -230,7 +201,6 @@ class Student(models.Model):
     
     form_filled = models.BooleanField(default=False)
 
-    #verified field
     principle_verified = models.BooleanField(default=False)
     fees_verified = models.BooleanField(default=False)
     clerk_verified = models.BooleanField(default=False)
@@ -241,41 +211,36 @@ class Student(models.Model):
 
     gr_no =  models.CharField(max_length=100, default=None,blank=True, null=True)
 
-    
 
 class StudentFieldValue(models.Model):
-    student = models.ForeignKey(
-        'Student',   # renamed from Student
-        on_delete=models.CASCADE,
-        related_name='field_values'
-    )
-    
 
-    field = models.ForeignKey(
-        'FormField',
-        on_delete=models.CASCADE,
-        related_name='values'
-    )
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+
+    student = models.ForeignKey('Student', on_delete=models.CASCADE, related_name='field_values')
+    field = models.ForeignKey('FormField', on_delete=models.CASCADE, related_name='values')
 
     value = models.TextField(blank=True, null=True)
     file = models.FileField(upload_to='student_files/', blank=True, null=True)
 
     def __str__(self):
-        return f"{self.student.email} - {self.field.label}"
+        return f"{self.student} - {self.field.label}"
+
 
 class Subject(models.Model):
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+
     name = models.CharField(max_length=100)
-    division = models.ForeignKey(
-        Division, 
-        on_delete=models.CASCADE, 
-        related_name='subjects'
-    )
+    division = models.ForeignKey(Division, on_delete=models.CASCADE, related_name='subjects')
 
     def __str__(self):
         return f"{self.name} ({self.division})"
     
 
 class Syllabus(models.Model):
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+
     division = models.ForeignKey('Division', on_delete=models.CASCADE, related_name='syllabi')
     subject = models.ForeignKey('Subject', on_delete=models.CASCADE, related_name='syllabi')
     syllabus_file = models.FileField(upload_to='syllabus/')
@@ -283,19 +248,18 @@ class Syllabus(models.Model):
     def __str__(self):
         return f"{self.division} - {self.subject}"
 
+
 class AdmissionFee(models.Model):
-    # student = models.ForeignKey("Student", on_delete=models.CASCADE)
-    
-    # Amount details
-    amount = models.IntegerField()  # in rupees
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+
+    amount = models.IntegerField()
     currency = models.CharField(max_length=10, default="INR")
 
-    # Razorpay fields
     razorpay_order_id = models.CharField(max_length=255, blank=True, null=True)
     razorpay_payment_id = models.CharField(max_length=255, blank=True, null=True)
     razorpay_signature = models.CharField(max_length=255, blank=True, null=True)
     
-    # Status tracking
     STATUS_CHOICES = [
         ("created", "Created"),
         ("pending", "Pending"),
@@ -305,15 +269,14 @@ class AdmissionFee(models.Model):
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="created")
 
-    # # Extra useful fields
-    # receipt_id = models.CharField(max_length=255, blank=True, null=True)
-    # payment_method = models.CharField(max_length=50, blank=True, null=True)
-
-    # timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(blank=True, null=True)
     
+
 class AssignClass(models.Model):
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+
     teacher = models.ForeignKey(Staff, on_delete=models.CASCADE, null= True, blank=True)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, null= True, blank=True)
     division = models.ForeignKey(Division, on_delete=models.CASCADE, null= True, blank=True)
