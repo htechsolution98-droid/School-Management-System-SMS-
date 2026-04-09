@@ -212,6 +212,27 @@ class SchoolClassSerializer(serializers.ModelSerializer):
         raise serializers.ValidationError(
             "Invalid format. Examples: 'Nursery', 'Class 11 Science', 'Class 5'."
         )
+    def validate(self, data):
+        school = data.get('school')
+        school_class = data.get('school_class')
+
+        # ⚠️ Important for update case
+        instance = getattr(self, 'instance', None)
+
+        queryset = SchoolClass.objects.filter(
+            school=school,
+            school_class__iexact=school_class  # 🔥 case-insensitive check
+        )
+
+        if instance:
+            queryset = queryset.exclude(id=instance.id)
+
+        if queryset.exists():
+            raise serializers.ValidationError(
+                "Class already exists for this school"
+            )
+
+        return data
     
 class FormFieldSerializer(serializers.ModelSerializer):
     class Meta:

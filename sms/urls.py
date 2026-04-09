@@ -43,9 +43,9 @@ schema_view = get_schema_view(
 
 router = DefaultRouter()
 
-router.register(r'SchoolView',SchoolView, basename='SchoolView')
-router.register(r'StaffView',StaffView, basename='StaffView')
-router.register(r'studentSignUp',StudentSignUpView, basename='studentSignUp')
+router.register(r'SchoolView',SchoolView, basename='SchoolView') # DONE
+router.register(r'StaffView',StaffView, basename='StaffView') # DONE
+router.register(r'studentSignUp',StudentSignUpView, basename='studentSignUp') # On Changing
 
 # router.register(r'forms', FormViewSet, basename='forms') 
 # router.register(r'FormFillViewSet', FormFillViewSet, basename='FormFillViewSet')
@@ -64,7 +64,7 @@ router.register(r'StudentFIllView', StudentFIllView, basename='StudentFIllView')
 
 # =========admissions process router========
 
-router.register(r'schoolclass', SchoolClassView, basename='schoolclass') #also use for get class data on divisionSet and submissions  drop down 
+router.register(r'schoolclass', SchoolClassView, basename='schoolclass')  #also use for get class data on divisionSet and submissions  drop down 
 router.register(r'divisionSet', SetDivisionView, basename='divisionSet')
 
 router.register(r'forms', AdmissionFormViewSet, basename='forms')

@@ -64,31 +64,6 @@ class Staff(models.Model):
     def __str__(self):
         return f"{self.name} ({self.category})"
     
-
-class SchoolClass(models.Model):
-
-    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
-
-    CLASS_CHOICES = (
-        ('nursery', 'Nursery'),
-        ('lkg', 'LKG'),
-        ('ukg', 'UKG'),
-        ('class_1', 'Class 1'),
-        ('class_2', 'Class 2'),
-        ('class_3', 'Class 3'),
-        ('class_4', 'Class 4'),
-        ('class_5', 'Class 5'),
-        ('class_6', 'Class 6'),
-        ('class_7', 'Class 7'),
-        ('class_8', 'Class 8'),
-        ('class_9', 'Class 9'),
-        ('class_10', 'Class 10'),
-        ('class_11', 'Class 11'),
-        ('class_12', 'Class 12'),
-    )
-
-    school_class = models.CharField(max_length=100, choices=CLASS_CHOICES, blank=True, null=True)
-    stream = models.JSONField(default=list,blank=True)
     
 
 class SchoolClass(models.Model):

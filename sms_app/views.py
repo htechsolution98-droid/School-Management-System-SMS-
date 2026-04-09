@@ -368,7 +368,7 @@ class FeeVerifyView(ModelViewSet):
 class SchoolClassView(ModelViewSet):
     queryset = SchoolClass.objects.all()
     serializer_class = SchoolClassSerializer
-    
+        
 # ========================================
     
 # ========= admissions process views ========
