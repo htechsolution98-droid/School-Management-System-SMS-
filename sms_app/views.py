@@ -364,11 +364,16 @@ class FeeVerifyView(ModelViewSet):
         return Student.objects.filter(Q(clerk_verified = True) & Q(principle_verified=True))
 
 # =====serializer for School class=====
+class ClassView(ModelViewSet):
+    queryset = SchoolClass.objects.all()
+    serializer_class = SchoolClassSerializer
+    http_method_names = ["GET"]
 
 class SchoolClassView(ModelViewSet):
     queryset = SchoolClass.objects.all()
     serializer_class = SchoolClassSerializer
     permission_classes = [IsAuthenticated, Isprincipal]
+    
     
     def list(self, request, *args, **kwargs):
         school_id = request.user.school.id
@@ -402,6 +407,12 @@ class SchoolClassView(ModelViewSet):
         school_id = instance.school.id
         instance.delete()
         cache.delete(f"school_classes_{school_id}")
+        
+    def create(self, request, *args, **kwargs):
+        super().create(request, *args, **kwargs)
+        return Response({
+            "message": "Class created Successfully"
+        }, status=201)
 # ========================================
     
 # ========= admissions process views ========
@@ -583,29 +594,111 @@ class DivisionSetView(ModelViewSet):
     queryset =Student.objects.all()
     serializer_class = DivisionSetSerilaizer
 
-# Only for Post method  
+# Only for Post method  from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.viewsets import ModelViewSet
+from django.core.cache import cache
+import string
+
+
 class SetDivisionView(ModelViewSet):
     queryset = Division.objects.all()
     serializer_class = SetDivisionSerializer
-    
+    permission_classes = [IsAuthenticated, IsCLerk]
+
+    # ✅ GET (LIST with Redis Cache)
+    def list(self, request, *args, **kwargs):
+        school_id = request.user.school.id
+
+        cache_key = f"divisions_school_{school_id}"
+
+        # ✅ Check Cache
+        cached_data = cache.get(cache_key)
+        # if cached_data:
+        #     return Response({
+        #         "message": "Data fetched from cache",
+        #         "data": cached_data
+        #     })
+
+        # ✅ Fetch from DB
+        queryset = Division.objects.filter(school_id=school_id)
+        serializer = self.get_serializer(queryset, many=True)
+
+        # ✅ Store in Redis
+        cache.set(cache_key, serializer.data, timeout=60 * 10)
+
+        return Response(serializer.data)
+
+    # ✅ CREATE (already done, just kept here)
     def create(self, request, *args, **kwargs):
-        division_count = int(request.data.get('division'))
+        division_count = request.data.get('division')
         school_class = request.data.get('SchoolClass')
         capacity = request.data.get('capacity')
+
+        if not division_count:
+            return Response({"error": "division is required"}, status=400)
+
+        if not school_class:
+            return Response({"error": "SchoolClass is required"}, status=400)
+
+        if not capacity:
+            return Response({"error": "capacity is required"}, status=400)
+
+        try:
+            division_count = int(division_count)
+            capacity = int(capacity)
+        except ValueError:
+            return Response({"error": "division and capacity must be integers"}, status=400)
+
+        if division_count <= 0 or division_count > 26:
+            return Response({"error": "division must be between 1 and 26"}, status=400)
+
+        existing = Division.objects.filter(SchoolClass_id=school_class).count()
+        if existing > 0:
+            return Response(
+                {"error": "Divisions already exist for this class"},
+                status=400
+            )
 
         alphabet = list(string.ascii_uppercase[:division_count])
 
         divisions = []
         for a in alphabet:
             obj = Division.objects.create(
-                SchoolClass_id=school_class,  # if FK
+                SchoolClass_id=school_class,
                 division=a,
-                capacity=capacity
+                school=self.request.user.school,
+                capacity=capacity,
             )
             divisions.append(obj)
 
+        # ✅ Clear Cache
+        cache.delete(f"divisions_{school_class}")
+
         serializer = self.get_serializer(divisions, many=True)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        return Response({
+            "message": "Division created Successfully",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+
+    # ✅ UPDATE (clear cache)
+    def perform_update(self, serializer):
+        instance = serializer.save()
+
+        cache_key = f"divisions_{instance.SchoolClass_id}"
+        cache.delete(cache_key)
+
+
+    # ✅ DELETE (clear cache)
+    def perform_destroy(self, instance):
+        cache_key = f"divisions_{instance.SchoolClass_id}"
+        cache.delete(cache_key)
+
+        instance.delete()
+    
+    
 
 # This Logic perfom with button after admission and complete and division is set    
 @transaction.atomic
@@ -646,14 +739,217 @@ def assign_student_divisions():
         Student.objects.bulk_update(students, ['division'])
 # ==================================================================
 
+from django.core.cache import cache
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.response import Response
+from rest_framework import status
+
 class SetSubjectView(ModelViewSet):
-    queryset = Subject.objects.all()
     serializer_class = SetSubjectSerializer
+    permission_classes = [IsAuthenticated, IsCLerk]
+
+    # ✅ Restrict queryset to user's school (IMPORTANT)
+    def get_queryset(self):
+        return Subject.objects.filter(school=self.request.user.school)
+
+    # ✅ CREATE
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        instance = serializer.save(school=request.user.school)
+
+        # ✅ Clear cache
+        school_id = request.user.school.id
+        school_class = instance.id
+
+        cache.delete(f"subjects_{school_id}_all")
+        cache.delete(f"subjects_{school_id}_{school_class}")
+
+        return Response({
+            "message": "Subject created successfully",
+            # "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    # ✅ LIST (GET ALL WITH CACHE)
+    def list(self, request, *args, **kwargs):
+        school_id = request.user.school.id
+        school_class = request.query_params.get("SchoolClass")
+
+        cache_key = f"subjects_{school_id}_{school_class if school_class else 'all'}"
+
+        # ✅ Check cache
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response({
+                "message": "Data fetched from cache",
+                "data": cached_data
+            })
+
+        queryset = self.get_queryset()
+
+        if school_class:
+            queryset = queryset.filter(SchoolClass_id=school_class)
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        # ✅ Set cache
+        cache.set(cache_key, serializer.data, timeout=60 * 10)
+
+        return Response({
+            "message": "Data fetched from DB",
+            "data": serializer.data
+        })
+
+    # ✅ RETRIEVE
+    def retrieve(self, request, *args, **kwargs):
+        subject_id = kwargs.get("pk")
+        cache_key = f"subject_{subject_id}"
+
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response({
+                "message": "Data fetched from cache",
+                "data": cached_data
+            })
+
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+
+        cache.set(cache_key, serializer.data, timeout=60 * 10)
+
+        return Response({
+            "message": "Data fetched from DB",
+            "data": serializer.data
+        })
+
+    # ✅ UPDATE
+    def perform_update(self, serializer):
+        instance = serializer.save()
+
+        school_id = instance.school.id
+        school_class = instance.SchoolClass_id
+
+        cache.delete(f"subjects_{school_id}_all")
+        cache.delete(f"subjects_{school_id}_{school_class}")
+        cache.delete(f"subject_{instance.id}")
+
+    # ✅ DELETE
+    def perform_destroy(self, instance):
+        school_id = instance.school.id
+        school_class = instance.SchoolClass_id
+
+        cache.delete(f"subjects_{school_id}_all")
+        cache.delete(f"subjects_{school_id}_{school_class}")
+        cache.delete(f"subject_{instance.id}")
+
+        instance.delete()
     
 
+from django.core.cache import cache
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.response import Response
+from rest_framework import status
+
 class SyllabusView(ModelViewSet):
-    queryset = Syllabus.objects.all()
     serializer_class = SyllabusSerializer
+
+    # ✅ Restrict to user's school
+    def get_queryset(self):
+        return Syllabus.objects.filter(school=self.request.user.school)
+
+    # ✅ CREATE
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        instance = serializer.save(school=request.user.school)
+
+        school_id = request.user.school.id
+        school_class = instance.SchoolClass_id
+
+        # ✅ Clear cache
+        cache.delete(f"syllabus_{school_id}_all")
+        cache.delete(f"syllabus_{school_id}_{school_class}")
+
+        return Response({
+            "message": "Syllabus created successfully",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    # ✅ LIST (WITH CACHE)
+    def list(self, request, *args, **kwargs):
+        school_id = request.user.school.id
+        school_class = request.query_params.get("SchoolClass")
+
+        cache_key = f"syllabus_{school_id}_{school_class if school_class else 'all'}"
+
+        # ✅ Check cache
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response({
+                "message": "Data fetched from cache",
+                "data": cached_data
+            })
+
+        queryset = self.get_queryset()
+
+        if school_class:
+            queryset = queryset.filter(SchoolClass_id=school_class)
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        # ✅ Store cache
+        cache.set(cache_key, serializer.data, timeout=60 * 10)
+
+        return Response({
+            "message": "Data fetched from DB",
+            "data": serializer.data
+        })
+
+    # ✅ RETRIEVE
+    def retrieve(self, request, *args, **kwargs):
+        syllabus_id = kwargs.get("pk")
+        cache_key = f"syllabus_single_{syllabus_id}"
+
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response({
+                "message": "Data fetched from cache",
+                # "data": cached_data
+            })
+
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+
+        cache.set(cache_key, serializer.data, timeout=60 * 10)
+
+        return Response({
+            "message": "Data fetched from DB",
+            "data": serializer.data
+        })
+
+    # ✅ UPDATE
+    def perform_update(self, serializer):
+        instance = serializer.save()
+
+        school_id = instance.school.id
+        school_class = instance.id
+
+        cache.delete(f"syllabus_{school_id}_all")
+        cache.delete(f"syllabus_{school_id}_{school_class}")
+        cache.delete(f"syllabus_single_{instance.id}")
+
+    # ✅ DELETE
+    def perform_destroy(self, instance):
+        school_id = instance.school.id
+        school_class = instance.id
+
+        cache.delete(f"syllabus_{school_id}_all")
+        cache.delete(f"syllabus_{school_id}_{school_class}")
+        cache.delete(f"syllabus_single_{instance.id}")
+
+        instance.delete()
 
 
 class AssignClassView(ModelViewSet):

@@ -253,6 +253,7 @@ class Subject(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
 
     name = models.CharField(max_length=100)
+    
     division = models.ForeignKey(Division, on_delete=models.CASCADE, related_name='subjects')
 
     def __str__(self):

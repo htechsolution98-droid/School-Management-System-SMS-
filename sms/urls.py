@@ -55,7 +55,7 @@ router.register(r'studentSignUp',StudentSignUpView, basename='studentSignUp') # 
 # router.register(r'StudentView', StudentView, basename='StudentView')#first
 
 # both api use togather when student form fill
-router.register(r'StudentFIllView', StudentFIllView, basename='StudentFIllView')
+router.register(r'StudentFIllView', StudentFIllView, basename='StudentFIllView') # Not WOrking
 
 # router.register(r'StudentDocumentview', StudentDocumentview, basename='StudentDocumentview')
 
@@ -65,6 +65,7 @@ router.register(r'StudentFIllView', StudentFIllView, basename='StudentFIllView')
 # =========admissions process router========
 
 router.register(r'schoolclass', SchoolClassView, basename='schoolclass')  #also use for get class data on divisionSet and submissions  drop down 
+router.register(r'getclass', ClassView, basename='getclass')  #also use for get class data on divisionSet and submissions  drop down 
 router.register(r'divisionSet', SetDivisionView, basename='divisionSet')
 
 router.register(r'forms', AdmissionFormViewSet, basename='forms')
@@ -87,7 +88,7 @@ router.register(r'PrincipleVerifyView', PrincipleVerifyView, basename='Principle
 router.register(r'FeeVerifyView', FeeVerifyView, basename='FeeVerifyView')
 
 router.register(r'setSubject', SetSubjectView, basename='setSubject')
-router.register(r'Syllabus', SyllabusView, basename='Syllabus')
+router.register(r'syllabus', SyllabusView, basename='syllabus')
 router.register(r'assignClass', AssignClassView, basename='assignClass')
 
 

@@ -460,12 +460,14 @@ class SetSubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
         fields = '__all__'
+        read_only_fields = ['school']
         
 class SyllabusSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Syllabus
         fields = '__all__'
+        read_only_fields = ['school']
 
 
 class AssignClassSerializer(serializers.ModelSerializer):
