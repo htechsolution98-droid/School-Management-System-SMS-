@@ -76,10 +76,18 @@ TEMPLATES = [
     },
 ]
 import os
+
+
+REDIS_URL = os.getenv("REDIS_URL")
+
+if not REDIS_URL:
+    REDIS_URL = "redis://127.0.0.1:6379/1"
+    
+    
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": os.environ.get("REDIS_URL"),
+        "LOCATION": REDIS_URL,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
