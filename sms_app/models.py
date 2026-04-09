@@ -192,6 +192,7 @@ class Student(models.Model):
 
     form = models.ForeignKey('AdmissionForm',on_delete=models.CASCADE)
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
+    mobile = models.IntegerField(null=True, blank=True)
 
     school_class = models.ForeignKey(SchoolClass, on_delete=models.CASCADE, null=True, blank=True)
     division = models.CharField(max_length=20, null=True,blank=True)
@@ -214,27 +215,26 @@ class Student(models.Model):
 
 
 class StudentFieldValue(models.Model):
-
+    form_id = models.ForeignKey(AdmissionForm, on_delete=models.CASCADE, null=True, blank=True )
     school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
-
+    
     student = models.ForeignKey('Student', on_delete=models.CASCADE, related_name='field_values')
     field = models.ForeignKey('FormField', on_delete=models.CASCADE, related_name='values')
 
     value = models.TextField(blank=True, null=True)
-    file = models.FileField(upload_to='student_files/', blank=True, null=True)
 
     def __str__(self):
         return f"{self.student} - {self.field.label}"
 
 class DocumentField(models.Model):
-    form_id = models.ForeignKey('AdmissionForm', on_delete=models.CASCADE, null=True, blank=True)
+    form_id = models.ForeignKey('AdmissionForm', on_delete=models.CASCADE, null=True, blank=True,related_name='label')
     
     school = models.ForeignKey(
         'School',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='document_fields'   # ✅ changed
+        related_name='document_fields'   # changed
     )
 
     label = models.CharField(max_length=255, null=True, blank=True)

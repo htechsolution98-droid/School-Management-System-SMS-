@@ -95,7 +95,7 @@ router.register(r'assignClass', AssignClassView, basename='assignClass')
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/',include(router.urls)),
-    path('api/access/',TokenObtainPairView.as_view()),  
+    path('api/access/',CustomLoginView.as_view()),  
         
     path('api/refresh/',TokenRefreshView.as_view()),
     

@@ -26,58 +26,58 @@ User = get_user_model()
 class CustomLoginView(TokenObtainPairView):
     serializer_class = CustomeLoginSerializer
 
-    def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
+    # def post(self, request, *args, **kwargs):
+    #     response = super().post(request, *args, **kwargs)
 
-        if response.status_code == 200:
-            access = response.data.pop('access', None)
-            refresh = response.data.pop('refresh', None)
+    #     if response.status_code == 200:
+    #         access = response.data.pop('access', None)
+    #         refresh = response.data.pop('refresh', None)
 
-            response.set_cookie(
-                key='access_token',
-                value=access,
-                httponly=True,
-                secure=False,  # True in production (HTTPS)
-                samesite='Lax'
-            )
+    #         response.set_cookie(
+    #             key='access_token',
+    #             value=access,
+    #             httponly=True,
+    #             secure=False,  # True in production (HTTPS)
+    #             samesite='Lax'
+    #         )
 
-            response.set_cookie(
-                key='refresh_token',
-                value=refresh,
-                httponly=True,
-                secure=False,
-                samesite='Lax'
-            )
+    #         response.set_cookie(
+    #             key='refresh_token',
+    #             value=refresh,
+    #             httponly=True,
+    #             secure=False,
+    #             samesite='Lax'
+    #         )
 
-        return response
+    #     return response
     
 
 from rest_framework_simplejwt.views  import TokenRefreshView
 
-class CookieTokenRefreshView(TokenRefreshView):
-    def post(self, request, *args, **kwargs):
+# class CookieTokenRefreshView(TokenRefreshView):
+#     def post(self, request, *args, **kwargs):
         
-        refresh_token = request.COOKIES.get('refresh_token')
+#         refresh_token = request.COOKIES.get('refresh_token')
         
-        if not refresh_token:
-            return None
+#         if not refresh_token:
+#             return None
         
-        request.data['refresh'] = refresh_token
+#         request.data['refresh'] = refresh_token
         
-        response = super().post(request, *args, **kwargs)
+#         response = super().post(request, *args, **kwargs)
         
-        if response.status_code == 200:
-            access_token = response.get('access')
+#         if response.status_code == 200:
+#             access_token = response.get('access')
             
-            response.set_cookie(
-                key='access_token',
-                value=access_token,
-                httponly=True,
-                secure=False,
-                samesite='Lax'
-            )
+#             response.set_cookie(
+#                 key='access_token',
+#                 value=access_token,
+#                 httponly=True,
+#                 secure=False,
+#                 samesite='Lax'
+#             )
             
-        return response
+#         return response
             
             
 #====== CODE for GENERATE ID & CODE =====
@@ -376,9 +376,9 @@ from rest_framework import status
 
 # ========= using this serializers principle set DocumentField=========
 
-class DocumentFieldview(ModelViewSet):
-    queryset = DocumentField.objects.all()
-    serializer_class = DocumentFieldSerializer
+# class DocumentFieldview(ModelViewSet):
+#     queryset = DocumentField.objects.all()
+#     serializer_class = DocumentFileSerializer
     
 # =====================================================================
 
@@ -386,9 +386,8 @@ class DocumentFieldview(ModelViewSet):
 class AdmissionFormViewSet(ModelViewSet):
     queryset = AdmissionForm.objects.all()
     serializer_class = AdmissionFormSerializer
-    permission_classes = [IsAuthenticated]  
+    permission_classes = [IsAuthenticated]
     
- 
     lookup_field = 'unique_link'  # access form via UUID
 
     def get_queryset(self):
@@ -411,12 +410,13 @@ class AdmissionFormViewSet(ModelViewSet):
 class FormFieldViewSet(ModelViewSet):
     queryset = AdmissionForm.objects.all()
     serializer_class = AdmissionFormViewSerializer
+    lookup_field = 'unique_link'
 # =================================================== 
     
     
 class FormSubmissionViewSet(ModelViewSet):
     queryset = Student.objects.all()
-    serializer_class = [Isstudent]
+    # serializer_class = [Isstudent]
     
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve']:

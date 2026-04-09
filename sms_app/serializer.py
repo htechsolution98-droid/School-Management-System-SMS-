@@ -239,13 +239,7 @@ class AdmissionFeeStructureSerializer(serializers.ModelSerializer):
         fields = ['class_name', 'fee_amount']  
 # =================================================
 
-class DocumentFieldSerializer(serializers.ModelSerializer):
-    document_field = serializers.CharField(write_only =True)
-    class Meta:
-        model = DocumentField
-        fields = ['document_field']
-        read_only_fields = ['form_id','school','created_at']
-        
+
 
 class AdmissionFormSerializer(serializers.ModelSerializer):
     sections = FormSectionSerializer(many=True)
@@ -291,17 +285,22 @@ class AdmissionFormSerializer(serializers.ModelSerializer):
         return form
     
 
-
+class DocumentFieldSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocumentField
+        fields = ['id','label']
+        read_only_fields = ['form_id','school','created_at']
+        
 
 # ====this  serializer for view admission form field====
 
 class AdmissionFormViewSerializer(serializers.ModelSerializer):
     sections = FormSectionSerializer(many=True)
     fee_structures = AdmissionFeeStructureSerializer(many=True,read_only=True)
-
+    label = DocumentFieldSerializer(many = True, read_only =True )
     class Meta:
         model = AdmissionForm
-        fields = ['id', 'title', 'description','sections','fees_enable','fee_type','fees','fee_structures']
+        fields = ['id', 'title', 'description','sections','fees_enable','fee_type','fees','fee_structures','label']
         
 # ===========================================================      
 
@@ -315,7 +314,7 @@ class FormSubmissionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Student
-        fields = ['id', 'form','school_class','field_values']
+        fields = ['id', 'form','school_class','mobile','field_values']
 
     def validate(self, data):
         form = data['form']
