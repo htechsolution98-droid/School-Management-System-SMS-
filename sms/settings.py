@@ -94,6 +94,18 @@ CACHES = {
     }
 }
 
+from datetime import timedelta
+
+
+SIMPLE_JWT = {
+    # Access token lifetime
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+
+    # Refresh token lifetime
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+
+
+}
 
 WSGI_APPLICATION = "sms.wsgi.application"
 
