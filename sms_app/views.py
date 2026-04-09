@@ -367,7 +367,7 @@ class FeeVerifyView(ModelViewSet):
 class ClassView(ModelViewSet):
     queryset = SchoolClass.objects.all()
     serializer_class = SchoolClassSerializer
-    http_method_names = ["GET"]
+    http_method_names = ['get']
 
 class SchoolClassView(ModelViewSet):
     queryset = SchoolClass.objects.all()
