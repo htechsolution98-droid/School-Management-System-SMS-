@@ -75,11 +75,11 @@ TEMPLATES = [
         },
     },
 ]
-
+import os
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",
+        "LOCATION": os.environ.get("REDIS_URL"),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
@@ -107,7 +107,7 @@ RAZOR_PAY_SECRET_KEY = 'tOuPZYUHmzksgtc0370q89fO'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 import dj_database_url
-import os
+
 
 DATABASES = {
     'default': dj_database_url.config(

@@ -368,7 +368,40 @@ class FeeVerifyView(ModelViewSet):
 class SchoolClassView(ModelViewSet):
     queryset = SchoolClass.objects.all()
     serializer_class = SchoolClassSerializer
+    permission_classes = [IsAuthenticated, Isprincipal]
+    
+    def list(self, request, *args, **kwargs):
+        school_id = request.user.school.id
+        cache_key = f"school_classes_{school_id}"
+
+        data = cache.get(cache_key)
         
+        if data:
+            print("cach")
+
+        if not data:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            data = serializer.data
+
+            cache.set(cache_key, data, timeout=60*10)
+
+        return Response(data)
+
+    def perform_create(self, serializer):
+        serializer.save(school=self.request.user.school)
+
+        instance = serializer.save()
+        cache.delete(f"school_classes_{instance.school.id}")
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        cache.delete(f"school_classes_{instance.school.id}")
+
+    def perform_destroy(self, instance):
+        school_id = instance.school.id
+        instance.delete()
+        cache.delete(f"school_classes_{school_id}")
 # ========================================
     
 # ========= admissions process views ========
