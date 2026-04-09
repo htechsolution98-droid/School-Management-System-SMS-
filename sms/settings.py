@@ -75,6 +75,7 @@ TEMPLATES = [
         },
     },
 ]
+import os
 
 CACHES = {
     "default": {
@@ -107,7 +108,6 @@ RAZOR_PAY_SECRET_KEY = 'tOuPZYUHmzksgtc0370q89fO'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 import dj_database_url
-import os
 
 DATABASES = {
     'default': dj_database_url.config(
