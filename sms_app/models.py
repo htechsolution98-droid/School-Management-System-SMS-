@@ -143,7 +143,7 @@ class FormField(models.Model):
     FIELD_TYPES = [
         ('text', 'Text'),
         ('number', 'Number'),
-        ('file', 'File'),
+        # ('file', 'File'),
         ('date', 'Date'),
         ('select', 'Select'),
         ('checkbox', 'Checkbox'),
@@ -172,7 +172,7 @@ class Student(models.Model):
     school_class = models.ForeignKey(SchoolClass, on_delete=models.CASCADE, null=True, blank=True)
     division = models.CharField(max_length=20, null=True,blank=True)
     
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     
     form_filled = models.BooleanField(default=False)

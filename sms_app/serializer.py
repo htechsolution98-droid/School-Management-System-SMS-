@@ -53,6 +53,14 @@ class StaffSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Email is already exists.")
         return value
 
+    
+
+class GetTeacherSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Staff
+        fields = '__all__'
+    
+
 class StudentSignUpSerliazer(serializers.ModelSerializer):
     name = serializers.CharField(write_only = True)
     password = serializers.CharField(write_only = True)
@@ -287,10 +295,10 @@ class AdmissionFormSerializer(serializers.ModelSerializer):
 
         for section_data in sections_data:
             fields_data = section_data.pop('fields')
-            section = FormSection.objects.create(form=form, **section_data)
+            section = FormSection.objects.create(form=form, school = school, **section_data)
 
             for field_data in fields_data:
-                FormField.objects.create(section=section, **field_data)
+                FormField.objects.create(section=section,school = school, **field_data)
                 
         
         for label in document_field:
@@ -323,7 +331,14 @@ class AdmissionFormViewSerializer(serializers.ModelSerializer):
         model = AdmissionForm
         fields = ['id', 'title', 'description','sections','fees_enable','fee_type','fees','fee_structures','label']
         
-# ===========================================================      
+# ===========================================================
+
+class ChangeFormStatus(serializers.ModelSerializer):
+    class Meta:
+        model = AdmissionForm
+        fields = ['is_active']
+    
+    
 
 class StudentFieldValueSerializer(serializers.ModelSerializer):
     class Meta:

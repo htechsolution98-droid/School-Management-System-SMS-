@@ -14,7 +14,7 @@ from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.response import Response
-
+from rest_framework.decorators import api_view
 from django.db.models import Q
 
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -266,6 +266,15 @@ class StaffView(ModelViewSet):
         instance.delete()
         cache.delete(f"staff_list_{self.request.user.id}")
 
+
+class GetTeacherView(ModelViewSet):
+    queryset = Staff.objects.all()
+    serializer_class = GetTeacherSerializer
+    http_method_names = ['get']
+
+    def get_queryset(self):
+        return Staff.objects.filter(user__groups__name = "TEACHER")
+    
 class StudentSignUpView(ModelViewSet):
     queryset = User.objects.all()
     serializer_class = StudentSignUpSerliazer
@@ -432,7 +441,8 @@ class AdmissionFormViewSet(ModelViewSet):
     serializer_class = AdmissionFormSerializer
     permission_classes = [IsAuthenticated]
     
-    lookup_field = 'unique_link'  # access form via UUID
+    lookup_field = 'unique_link' 
+    # access form via UUID
 
     def get_queryset(self):
         return AdmissionForm.objects.filter(is_active=True)
@@ -451,16 +461,67 @@ class AdmissionFormViewSet(ModelViewSet):
    
 # ====this view set for view admission form field====
 
-class FormFieldViewSet(ModelViewSet):
+class FormFieldViewSet(RetrieveAPIView):
     queryset = AdmissionForm.objects.all()
     serializer_class = AdmissionFormViewSerializer
     lookup_field = 'unique_link'
-# =================================================== 
     
+# ===================================================
+# for admission form status change /
+class FormStatus(ModelViewSet):
+    queryset = AdmissionForm.objects.all()
+    serializer_class = ChangeFormStatus
+    serializer_class = [IsAuthenticated,Isprincipal]
+    http_method_names = ['patch']
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        is_active = request.data.get('is_active')
+
+        with transaction.atomic():
+            # If setting this form to active
+            if is_active is True or is_active == 'true':
+                # Make all other forms inactive
+                AdmissionForm.objects.exclude(id=instance.id).update(is_active=False)
+
+            # Update current instance
+            serializer = self.get_serializer(instance, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+
+        return Response({
+            "message": "Form Public successfully",
+            # "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+# for send form link
+@api_view(['GET'])
+def ShareFormLink(request):
+    form = AdmissionForm.objects.filter(is_active = True).first()
+    
+    form_link = f"http://127.0.0.1:8000/admission/{form.unique_link}/"
+    
+    return Response({
+         "form_link":form_link
+    })
+    
+# this for craete admission link
+def Admission(request, unique_link):
+    form = AdmissionForm.objects.filter(unique_link = unique_link).first()
+    
+    if not form:
+        return render(request, "error.html", {"message": "Invalid Form Link"})
+    
+    if not form.is_active:
+        return render(request, "error.html", {"message": "Form Is Not Active"})
+        
+    return render(request, "index.html",{'unique_link':unique_link})
+
     
 class FormSubmissionViewSet(ModelViewSet):
     queryset = Student.objects.all()
     # serializer_class = [Isstudent]
+    serializer_class = FormSubmissionSerializer
     
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve']:
@@ -469,7 +530,9 @@ class FormSubmissionViewSet(ModelViewSet):
     
     def perform_create(self, serializer):  
         serializer.save(user=self.request.user)
-    
+
+
+
 class FormSubmissionReadView(ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = FormSubmissionReadSerializer

@@ -47,52 +47,41 @@ router.register(r'SchoolView',SchoolView, basename='SchoolView') # DONE
 router.register(r'StaffView',StaffView, basename='StaffView') # DONE
 router.register(r'studentSignUp',StudentSignUpView, basename='studentSignUp') # On Changing
 
-# router.register(r'forms', FormViewSet, basename='forms') 
-# router.register(r'FormFillViewSet', FormFillViewSet, basename='FormFillViewSet')
-# router.register(r'responses', FormResponseViewSet, basename='responses')
-
-
-# router.register(r'StudentView', StudentView, basename='StudentView')#first
-
 # both api use togather when student form fill
-router.register(r'StudentFIllView', StudentFIllView, basename='StudentFIllView') # Not WOrking
+router.register(r'StudentFIllView', StudentFIllView, basename='StudentFIllView') #  Not in use
 
-# router.register(r'StudentDocumentview', StudentDocumentview, basename='StudentDocumentview')
+# =========ADMISSIONS PROCESS ROUTER========
 
-# router.register(r'documentField', DocumentFieldview, basename='documentField') # fro for
+router.register(r'schoolclass', SchoolClassView, basename='schoolclass')  #only use principle METHOD [GET,POST,PUT,DELETE]
+router.register(r'getclass', ClassView, basename='getclass')  #For Admission Form class Drop Down METHOD [GET]
 
+# ===== api for admission  proccess =====
+router.register(r'forms', AdmissionFormViewSet, basename='forms')# For Principle use TO create admission form METHOD [POST] 
+router.register(r'formstatus', FormStatus, basename='formstatus')# For Principle use TO create admission form METHOD [POST] 
 
-# =========admissions process router========
+# router.register(r'fields', FormFieldViewSet, basename='fields') #to retrive fields of admission form that added by principle
+router.register(r'submissions', FormSubmissionViewSet, basename='submissions')# admission form fill fields METHOD [POST]  ----API Need---  api/schoolclass/ for class drop down
 
-router.register(r'schoolclass', SchoolClassView, basename='schoolclass')  #also use for get class data on divisionSet and submissions  drop down 
-router.register(r'getclass', ClassView, basename='getclass')  #also use for get class data on divisionSet and submissions  drop down 
-router.register(r'divisionSet', SetDivisionView, basename='divisionSet')
-
-router.register(r'forms', AdmissionFormViewSet, basename='forms')
-
-# api to get fields in AdmissionForm
-router.register(r'fields', FormFieldViewSet, basename='fields') #to retrive fields of admission form that added by principle
-
-# ===== api for form submission =====
-router.register(r'submissions', FormSubmissionViewSet, basename='submissions')
 
 #===== set only use get this api====== 
-router.register(r'StudentDataview', FormSubmissionReadView, basename='StudentDataview')
+router.register(r'StudentDataview', FormSubmissionReadView, basename='StudentDataview') # Not in use
 
 
-# =====verify api=====
-router.register(r'ClerkVerify', ClerkVerifyView, basename='ClerkVerifyView')
 
-router.register(r'PrincipleVerifyView', PrincipleVerifyView, basename='PrincipleVerifyView')
+# =====verify api===== after admission sudmission
+router.register(r'ClerkVerify', ClerkVerifyView, basename='ClerkVerifyView') # For solve submission details METHOD [GET,PUT]
+router.register(r'PrincipleVerifyView', PrincipleVerifyView, basename='PrincipleVerifyView') # ask
+router.register(r'FeeVerifyView', FeeVerifyView, basename='FeeVerifyView')# ask
 
-router.register(r'FeeVerifyView', FeeVerifyView, basename='FeeVerifyView')
+router.register(r'setSubject', SetSubjectView, basename='setSubject')# For CLerk add subject METHOD [GET,POST,PUT,DELETE]  ----API Need---  api/schoolclass/ for class drop down
+router.register(r'divisionSet', SetDivisionView, basename='divisionSet') #For Clerk Use METHOD [GET,POST,PUT,DELETE] ----API Need---  api/schoolclass/ for class drop down
 
-router.register(r'setSubject', SetSubjectView, basename='setSubject')
-router.register(r'syllabus', SyllabusView, basename='syllabus')
-router.register(r'assignClass', AssignClassView, basename='assignClass')
+router.register(r'syllabus', SyllabusView, basename='syllabus') # For CLerk add syllabus METHOD [GET,POST,PUT,DELETE]   ----API Need---  api/schoolclass , setSubject for drop down
+router.register(r'getteacher', GetTeacherView, basename='getteacher') # For teacher dwop down METHOD [GET]
+
+router.register(r'assignClass', AssignClassView, basename='assignClass')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
 
 
-# =====set subject serializers=====
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/',include(router.urls)),
@@ -100,22 +89,28 @@ urlpatterns = [
         
     path('api/refresh/',TokenRefreshView.as_view()),
     
-    path('form_page/', TemplateView.as_view(template_name = 'add_form.html')),
-    # path('form/<int:pk>/', FormDetailAPIView.as_view()),
-    path('fill_form/',TemplateView.as_view(template_name='form_fill.html')),
-    # path('fillform/<int:id>/submit/',SubmitFormView.as_view()),
+    path('api/fields/<str:unique_link>/', FormFieldViewSet.as_view()),
     
-    # for admisiion for link
-    path('admission/',TemplateView.as_view(template_name='admisiom_form.html')),
+     path('admission/<str:unique_link>/',Admission),
+     path('admission/form/link/',ShareFormLink),
+     
+    # path('form_page/', TemplateView.as_view(template_name = 'add_form.html')),
+    # path('fill_form/',TemplateView.as_view(template_name='form_fill.html')),
+    # # path('fillform/<int:id>/submit/',SubmitFormView.as_view()),
+    
+    # # for admisiion for link
+    # path('admission/',TemplateView.as_view(template_name='admisiom_form.html')),
+    
+    # path('payment/',TemplateView.as_view(template_name='payment.html')),
+    # path('log/',TemplateView.as_view(template_name='login.html')),
+    
+    # path('in/',TemplateView.as_view(template_name='index.html')),
+   
     
     path('razor/order/',RazorpayOrderView.as_view()),
     path('payment/verify/',VerifyPaymentView.as_view()),
     path('webhook/',RazorpayWebhookView.as_view()),
     
-    
-    path('payment/',TemplateView.as_view(template_name='payment.html')),
-    path('log/',TemplateView.as_view(template_name='login.html')),
-    path('in/',TemplateView.as_view(template_name='index.html')),
      # Swagger UI
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0)),
 
@@ -127,4 +122,5 @@ urlpatterns = [
 
     
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
  
