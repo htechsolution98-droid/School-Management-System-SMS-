@@ -346,6 +346,8 @@ class StudentFieldValueSerializer(serializers.ModelSerializer):
         fields = ['field', 'value']   
 
 # 2
+from rest_framework.exceptions import ValidationError
+
 class FormSubmissionSerializer(serializers.ModelSerializer):
     field_values = StudentFieldValueSerializer(many=True, write_only=True)
 
@@ -384,12 +386,16 @@ class FormSubmissionSerializer(serializers.ModelSerializer):
         school_class = validated_data.pop('school_class')
         school = validated_data.pop('school')
 
+        if Student.objects.filter(mobile=mobile, details_done=True).exists():
+            raise ValidationError({"Error": "This number is not available"})
+        
         #  check existing student
         student = Student.objects.filter(
             mobile=mobile,
             details_done=False
         ).first()
-
+        
+        
         if student:
             #  UPDATE EXISTING STUDENT
             student.school = school
@@ -453,22 +459,45 @@ class DocumentSubmissionSerialiser(serializers.ModelSerializer):
         model = DocumentFile
         fields = ['form_id', 'school', 'student', 'documents']
 
+    from rest_framework.exceptions import ValidationError
+
     def create(self, validated_data):
         documents_data = validated_data.pop('documents')
         
+        student = validated_data.get('student')
+        form = validated_data.get('form_id')
+        school = validated_data.get('school')
+
+        # ❌ CASE 1: Documents already completed
+        if student.details_done:
+            raise ValidationError({
+                "student": "Documents process already completed"
+            })
+
         instances = []
+
         for doc in documents_data:
-            instance = DocumentFile.objects.create(
-                form_id=validated_data.get('form_id'),
-                school=validated_data.get('school'),
-                student=validated_data.get('student'),
-                label=doc.get('label'),
-                document=doc.get('document')
+            label = doc.get('label')
+            document = doc.get('document')
+
+            # 🔄 CASE 2: Update if already exists
+            obj, created = DocumentFile.objects.update_or_create(
+                student=student,
+                label=label,   # 👈 important: unique per label
+                defaults={
+                    'form_id': form,
+                    'school': school,
+                    'document': document
+                }
             )
-            instances.append(instance)
-     
+
+            instances.append(obj)
+
         return instances
 # =======================================================================
+
+class MobileCheckSerializer(serializers.Serializer):
+    mobile = serializers.CharField()
 # For viewing data 
 
 class StudentFieldValueReadSerializer(serializers.ModelSerializer):
@@ -560,3 +589,96 @@ class AssignClassSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssignClass
         fields = '__all__'
+
+
+class Tt_daySerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Tt_day
+        fields  = ['year','day','lecture']
+        read_only_fields = ['year']
+
+
+class Tt_day_timeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tt_day_time
+        fields= '__all__'
+        read_only_fields = ['day']
+        
+class Tt_yearSerializer(serializers.ModelSerializer):
+    start_year = serializers.IntegerField(write_only=True)
+    end_year = serializers.IntegerField(write_only=True)
+    # lecture = serializers.IntegerField(write_only=True)
+    end_year = serializers.IntegerField(write_only=True)
+
+    day = Tt_daySerializer(write_only =True)
+    
+    day_time = Tt_day_timeSerializer(write_only =True)
+    
+    class Meta:
+        model = Tt_year
+        fields = ['id', 'year', 'start_year', 'end_year','day','day_time']
+        read_only_fields = ['year']
+
+    def validate(self, data):
+        start = data.get('start_year')
+        end = data.get('end_year')
+
+        # ✅ ensure 4-digit numeric year
+        if len(str(start)) != 4 or len(str(end)) != 4:
+            raise serializers.ValidationError("Year must be 4 digits")
+
+        # ✅ range check
+        if not (1900 <= start <= 2100):
+            raise serializers.ValidationError("Start year must be between 1900 and 2100")
+
+        if not (1900 <= end <= 2100):
+            raise serializers.ValidationError("End year must be between 1900 and 2100")
+
+        # ✅ logical check
+        if end != start + 1:
+            raise serializers.ValidationError("End year must be start_year + 1")
+
+        return data
+
+    def create(self, validated_data):
+        start = validated_data.pop('start_year')
+        end = validated_data.pop('end_year')
+        day = validated_data.pop('day')
+        day_time_data = validated_data.pop('day_time')
+
+
+        year_str = f"{start}-{str(end)[-2:]}"
+
+        if Tt_year.objects.filter(year=year_str).exists():
+            raise serializers.ValidationError("This academic year already exists")
+        
+        tt_year = Tt_year.objects.create(year=year_str)
+        
+        tt_day = Tt_day.objects.create(
+            year = tt_year,
+            day = day.get('day'),
+            lecture = day.get('lecture')
+            )
+        
+        tt_time = Tt_day_time.objects.create(
+            day = tt_day,
+            start = day_time_data.get('start'),
+            end = day_time_data.get('end'),
+            breaks = day_time_data.get('breaks')
+        )
+        
+        
+        return tt_time
+
+    def to_representation(self, instance):
+        days = instance.tt_day_set.all()
+
+        return {
+            "id": instance.id,
+            "year": instance.year,
+            "days": [
+                {
+                    "day": d.day
+                } for d in days
+            ]
+        }

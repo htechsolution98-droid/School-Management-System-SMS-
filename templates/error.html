@@ -1,0 +1,80 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admission Portal Unavailable | Edunet</title>
+    <link rel="stylesheet" href="{% static 'sms_app/css/error_style.css' %}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="error-wrapper">
+        <div class="error-card">
+            <div class="illustration-container">
+                <!-- If the image generation finally works, I will update this src -->
+                <img id="error-image" src="school_illustration.png" alt="School Portal Maintenance" onerror="this.src='https://illustrations.popsy.co/gray/crashed-error.svg'">
+            </div>
+           
+            <div class="content">
+                <div class="status-badge">
+                    <i data-lucide="alert-circle" size="16"></i>
+                    <span>System Notice</span>
+                </div>
+               
+                <h1>Oops! Admission Portal is Temporarily Unavailable</h1>
+                <p>We're currently experiencing some technical difficulties while loading the admission form. Our team has been notified and is working to restore access as soon as possible.</p>
+               
+                <div class="contact-info">
+                    <div class="contact-item">
+                        <i data-lucide="mail"></i>
+                        <span>admissions@edunet.com</span>
+                    </div>
+                    <div class="contact-item">
+                        <i data-lucide="phone"></i>
+                        <span>+1 (234) 567-890</span>
+                    </div>
+                </div>
+ 
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="retry()">
+                        <i data-lucide="refresh-cw"></i> Try Again
+                    </button>
+                    <a href="../index.html" class="btn btn-outline">
+                        <i data-lucide="home"></i> Back to Main
+                    </a>
+                </div>
+            </div>
+        </div>
+       
+        <footer class="footer">
+            <p>&copy; 2026 Edunet Admission Platform. All rights reserved.</p>
+        </footer>
+    </div>
+ 
+    {% comment %} <script src="script.js"></script> {% endcomment %}
+    <script>
+        lucide.createIcons();
+    </script>
+    <script>
+        function retry() {
+    // Redirect back to the main admission form
+    window.location.href = '../index.html';
+}
+ 
+// Optional: check for specific error messages in URL query params
+document.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    const errorMsg = params.get('msg');
+    if (errorMsg) {
+        // You could dynamically update the text here if needed
+        console.log("Error details:", errorMsg);
+    }
+});
+    </script>
+
+</body>
+</html>

@@ -307,3 +307,23 @@ class AssignClass(models.Model):
 
     def __str__(self):
         return f"{self.teacher} - {self.subject} - {self.division}"
+    
+# ========= TIME TABLE MODEL============
+    
+class Tt_year(models.Model):
+    year = models.CharField(max_length=10, null=True, blank=True)
+    
+class Tt_day(models.Model):
+    year = models.ForeignKey(Tt_year, on_delete=models.CASCADE,null=True, blank=True)
+    day = models.CharField(max_length=50,null=True,blank=True)
+    school_class = models.ForeignKey(SchoolClass, )
+    lecture = models.CharField(max_length=50,null=True,blank=True)
+
+class Tt_day_time(models.Model):
+    day = models.ForeignKey(Tt_day,on_delete=models.CASCADE, null=True, blank=True)
+    start = models.TimeField(null=True, blank=True)
+    end = models.TimeField(null=True, blank=True)
+    breaks = models.CharField(max_length=5,null=True, blank=True)
+
+class Tt_breaks(models.Model):
+    pass

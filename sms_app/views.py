@@ -513,10 +513,11 @@ def Admission(request, unique_link):
     form = AdmissionForm.objects.filter(unique_link = unique_link).first()
     
     if not form:
-        return render(request, "error.html", {"message": "Invalid Form Link"})
+        school = School.objects.filter(login_id = form.school )
+        return render(request, "error.html", {"mobile": school.email ,"email":school.phone})
     
-    if not form.is_active:
-        return render(request, "error.html", {"message": "Form Is Not Active"})
+    # if not form.is_active:
+    #     return render(request, "error.html", {"message": "Form Is Not Active"})
         
     return render(request, "index.html",{'unique_link':unique_link})
 
@@ -590,7 +591,52 @@ class DocumentSubmissionView(ModelViewSet):
 class FormSubmissionReadView(ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = FormSubmissionReadSerializer
-    
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+class CheckMobileAPIView(APIView):
+    def post(self, request):
+        serializer = MobileCheckSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        mobile = serializer.validated_data['mobile']
+
+        student = Student.objects.filter(mobile=mobile).first()
+
+        # ❌ CASE 1: Already used
+        if student and student.details_done:
+            return Response({
+                "status": "used",
+                "message": "This number is already used"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 🔄 CASE 2: Resume
+        if student and not student.details_done:
+            values = StudentFieldValue.objects.filter(student=student)
+
+            return Response({
+                # "status": "resume",
+                "id": student.id,
+                "mobile": student.mobile,
+                "school": student.school.id if student.school else None,
+                "school_class": student.school_class.id if student.school_class else None,
+                "field_values": [
+                    {
+                        "field": v.field.id,
+                        "value": v.value
+                    }
+                    for v in values
+                ]
+            }, status=status.HTTP_200_OK)
+
+        # 🆕 CASE 3: New number
+        return Response({
+            "status": "new",
+            "message": "Mobile number is available"
+        }, status=status.HTTP_200_OK)    
     
 from .razorpay_client import client
 from rest_framework.views import APIView
@@ -1072,3 +1118,17 @@ class SyllabusView(ModelViewSet):
 class AssignClassView(ModelViewSet):
     queryset = AssignClass.objects.all()
     serializer_class = AssignClassSerializer
+
+# ========= TIME TABLE VIEWs============
+
+class Tt_yearView(ModelViewSet):
+    queryset = Tt_year.objects.all()
+    serializer_class = Tt_yearSerializer
+    
+class Tt_dayView(ModelViewSet): 
+    queryset = Tt_day.objects.all()
+    serializer_class = Tt_daySerializer
+    
+class Tt_day_timeView(ModelViewSet):  
+    queryset = Tt_day_time.objects.all()
+    serializer_class = Tt_day_timeSerializer

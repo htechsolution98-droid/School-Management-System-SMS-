@@ -82,6 +82,10 @@ router.register(r'getteacher', GetTeacherView, basename='getteacher') # For teac
 
 router.register(r'assignClass', AssignClassView, basename='assignClass')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
 
+# ========= TIME TABLE ROUTER ============
+router.register(r'tt_year', Tt_yearView, basename='tt_year')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
+router.register(r'tt_day', Tt_dayView, basename='tt_day')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
+router.register(r'tt_daytime', Tt_day_timeView, basename='tt_daytime')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -94,6 +98,7 @@ urlpatterns = [
     
      path('admission/<str:unique_link>/',Admission),
      path('admission/form/link/',ShareFormLink),
+     path('checkmobile/',CheckMobileAPIView.as_view()),
      
     # path('form_page/', TemplateView.as_view(template_name = 'add_form.html')),
     # path('fill_form/',TemplateView.as_view(template_name='form_fill.html')),
