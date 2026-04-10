@@ -329,7 +329,7 @@ class AdmissionFormViewSerializer(serializers.ModelSerializer):
     label = DocumentFieldSerializer(many = True, read_only =True )
     class Meta:
         model = AdmissionForm
-        fields = ['id', 'title', 'description','sections','fees_enable','fee_type','fees','fee_structures','label']
+        fields = ['id', 'title', 'school','description','sections','fees_enable','fee_type','fees','fee_structures','label']
         
 # ===========================================================
 
@@ -338,19 +338,20 @@ class ChangeFormStatus(serializers.ModelSerializer):
         model = AdmissionForm
         fields = ['is_active']
     
-    
-
+# --------Admission Form submite serializers---------
+# 1
 class StudentFieldValueSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentFieldValue
-        fields = ['field', 'value', 'file']
+        fields = ['field', 'value']   
 
+# 2
 class FormSubmissionSerializer(serializers.ModelSerializer):
     field_values = StudentFieldValueSerializer(many=True, write_only=True)
 
     class Meta:
         model = Student
-        fields = ['id', 'form','school_class','mobile','field_values']
+        fields = ['id', 'form','school', 'school_class', 'mobile', 'field_values']
 
     def validate(self, data):
         form = data['form']
@@ -369,35 +370,105 @@ class FormSubmissionSerializer(serializers.ModelSerializer):
             if field.id not in field_map:
                 raise serializers.ValidationError(f"Invalid field: {field.id}")
 
-            if field.is_required:
-                if field.field_type == 'file' and not item.get('file'):
-                    raise serializers.ValidationError(f"{field.label} is required")
-                elif field.field_type != 'file' and not item.get('value'):
-                    raise serializers.ValidationError(f"{field.label} is required")
+            # ✅ only value validation now
+            if field.is_required and not item.get('value'):
+                raise serializers.ValidationError(f"{field.label} is required")
 
         return data
-
+    
     def create(self, validated_data):
         field_values_data = validated_data.pop('field_values')
+        
+        form = validated_data.pop('form')
+        mobile = validated_data.pop('mobile')
+        school_class = validated_data.pop('school_class')
+        school = validated_data.pop('school')
 
-        submission = Student.objects.create(**validated_data)
+        #  check existing student
+        student = Student.objects.filter(
+            mobile=mobile,
+            details_done=False
+        ).first()
 
-        values = []
-        for item in field_values_data:
-            values.append(
-                StudentFieldValue(
-                    student=submission,
-                    field=item['field'],
-                    value=item.get('value'),
-                    file=item.get('file')
+        if student:
+            #  UPDATE EXISTING STUDENT
+            student.school = school
+            student.school_class = school_class
+            student.save()
+
+            for item in field_values_data:
+                field = item['field']
+                value = item.get('value')
+
+                obj, created = StudentFieldValue.objects.update_or_create(
+                    student=student,
+                    field=field,
+                    defaults={
+                        'value': value,
+                        'form_id': form,
+                        'school': school
+                    }
                 )
+
+            return student
+
+        else:
+            #  CREATE NEW STUDENT
+            submission = Student.objects.create(
+                form=form,
+                school=school,
+                mobile=mobile,
+                school_class=school_class
             )
 
-        StudentFieldValue.objects.bulk_create(values)
+            values = []
+            for item in field_values_data:
+                values.append(
+                    StudentFieldValue(
+                        student=submission,
+                        form_id=form,
+                        school=school,
+                        field=item['field'],
+                        value=item.get('value')
+                    )
+                )
+
+            StudentFieldValue.objects.bulk_create(values)
 
         return submission
-    
-    
+# ============================================================
+
+#------ Admission form document submittion serializers----------
+# 1
+class DocumentItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocumentFile
+        fields = ['label', 'document']
+        
+# 2
+class DocumentSubmissionSerialiser(serializers.ModelSerializer):
+    documents = DocumentItemSerializer(many=True, write_only=True)
+
+    class Meta:
+        model = DocumentFile
+        fields = ['form_id', 'school', 'student', 'documents']
+
+    def create(self, validated_data):
+        documents_data = validated_data.pop('documents')
+        
+        instances = []
+        for doc in documents_data:
+            instance = DocumentFile.objects.create(
+                form_id=validated_data.get('form_id'),
+                school=validated_data.get('school'),
+                student=validated_data.get('student'),
+                label=doc.get('label'),
+                document=doc.get('document')
+            )
+            instances.append(instance)
+     
+        return instances
+# =======================================================================
 # For viewing data 
 
 class StudentFieldValueReadSerializer(serializers.ModelSerializer):

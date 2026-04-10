@@ -466,6 +466,9 @@ class FormFieldViewSet(RetrieveAPIView):
     serializer_class = AdmissionFormViewSerializer
     lookup_field = 'unique_link'
     
+    def get_queryset(self):
+        return AdmissionForm.objects.filter(is_active=True)
+
 # ===================================================
 # for admission form status change /
 class FormStatus(ModelViewSet):
@@ -523,16 +526,67 @@ class FormSubmissionViewSet(ModelViewSet):
     # serializer_class = [Isstudent]
     serializer_class = FormSubmissionSerializer
     
-    def get_serializer_class(self):
-        if self.action in ['list', 'retrieve']:
-            return FormSubmissionReadSerializer
-        return FormSubmissionSerializer
+    # def get_serializer_class(self):
+    #     if self.action in ['list', 'retrieve']:
+    #         return FormSubmissionReadSerializer
+    #     return FormSubmissionSerializer
     
-    def perform_create(self, serializer):  
-        serializer.save(user=self.request.user)
+    # def perform_create(self, serializer):  
+    #     serializer.save(user=self.request.user)
 
 
+    
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
+from .models import DocumentFile
 
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
+from .models import DocumentFile
+# from .serializers import DocumentSubmissionSerialiser
+
+
+class DocumentSubmissionView(ModelViewSet):
+    queryset = DocumentFile.objects.all()
+    serializer_class = DocumentSubmissionSerialiser
+    parser_classes = [MultiPartParser, FormParser]
+
+    def create(self, request, *args, **kwargs):
+        data = request.data  # ✅ NO .copy()
+
+        documents = []
+        i = 0
+
+        while True:
+            label = data.get(f'documents[{i}][label]')
+            document = data.get(f'documents[{i}][document]')
+
+            if not label and not document:
+                break
+
+            documents.append({
+                "label": label,
+                "document": document
+            })
+            i += 1
+
+        # ✅ Build new clean dict (important)
+        final_data = {
+            "form_id": data.get("form_id"),
+            "school": data.get("school"),
+            "student": data.get("student"),
+            "documents": documents
+        }
+
+        serializer = self.get_serializer(data=final_data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        return Response({
+            "message": "Documents uploaded successfully"
+        })
 class FormSubmissionReadView(ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = FormSubmissionReadSerializer

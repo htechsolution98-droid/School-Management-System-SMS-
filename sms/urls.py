@@ -61,6 +61,7 @@ router.register(r'formstatus', FormStatus, basename='formstatus')# For Principle
 
 # router.register(r'fields', FormFieldViewSet, basename='fields') #to retrive fields of admission form that added by principle
 router.register(r'submissions', FormSubmissionViewSet, basename='submissions')# admission form fill fields METHOD [POST]  ----API Need---  api/schoolclass/ for class drop down
+router.register(r'documentsubmission', DocumentSubmissionView, basename='documentsubmission')# admission form fill fields METHOD [POST]  ----API Need---  api/schoolclass/ for class drop down
 
 
 #===== set only use get this api====== 

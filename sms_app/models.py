@@ -167,7 +167,7 @@ class Student(models.Model):
 
     form = models.ForeignKey('AdmissionForm',on_delete=models.CASCADE)
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
-    mobile = models.IntegerField(null=True, blank=True)
+    mobile = models.CharField(max_length=12,null=True, blank=True)
 
     school_class = models.ForeignKey(SchoolClass, on_delete=models.CASCADE, null=True, blank=True)
     division = models.CharField(max_length=20, null=True,blank=True)
@@ -175,7 +175,7 @@ class Student(models.Model):
     is_active = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     
-    form_filled = models.BooleanField(default=False)
+    details_done = models.BooleanField(default=False)
 
     principle_verified = models.BooleanField(default=False)
     fees_verified = models.BooleanField(default=False)
