@@ -591,11 +591,11 @@ class AssignClassSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class Tt_daySerializer(serializers.ModelSerializer):
-    class Meta:
-        model  = Tt_day
-        fields  = ['year','day','lecture']
-        read_only_fields = ['year']
+# class Tt_daySerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model  = Tt_day
+#         fields  = ['year','day','lecture','school_class']
+#         read_only_fields = ['year']
 
 
 class Tt_day_timeSerializer(serializers.ModelSerializer):
@@ -604,37 +604,46 @@ class Tt_day_timeSerializer(serializers.ModelSerializer):
         fields= '__all__'
         read_only_fields = ['day']
         
+class Tt_breaksSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tt_breaks
+        fields = '__all__'
+        read_only_fields = ['day']
+
+
+from django.db import transaction
+
 class Tt_yearSerializer(serializers.ModelSerializer):
     start_year = serializers.IntegerField(write_only=True)
     end_year = serializers.IntegerField(write_only=True)
-    # lecture = serializers.IntegerField(write_only=True)
-    end_year = serializers.IntegerField(write_only=True)
 
-    day = Tt_daySerializer(write_only =True)
-    
-    day_time = Tt_day_timeSerializer(write_only =True)
-    
+    day = serializers.CharField(write_only=True)
+    lecture = serializers.CharField(write_only=True)
+    school_class = serializers.PrimaryKeyRelatedField(
+        queryset=Division.objects.all(),
+        write_only=True
+    )    
+    day_time = Tt_day_timeSerializer(write_only=True)
+    breaks = Tt_breaksSerializer(write_only=True, many=True)
+
     class Meta:
         model = Tt_year
-        fields = ['id', 'year', 'start_year', 'end_year','day','day_time']
+        fields = ['id', 'year', 'start_year', 'end_year', 'day', 'lecture','school_class','day_time', 'breaks']
         read_only_fields = ['year']
 
     def validate(self, data):
         start = data.get('start_year')
         end = data.get('end_year')
 
-        # ✅ ensure 4-digit numeric year
         if len(str(start)) != 4 or len(str(end)) != 4:
             raise serializers.ValidationError("Year must be 4 digits")
 
-        # ✅ range check
         if not (1900 <= start <= 2100):
             raise serializers.ValidationError("Start year must be between 1900 and 2100")
 
         if not (1900 <= end <= 2100):
             raise serializers.ValidationError("End year must be between 1900 and 2100")
 
-        # ✅ logical check
         if end != start + 1:
             raise serializers.ValidationError("End year must be start_year + 1")
 
@@ -643,32 +652,46 @@ class Tt_yearSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         start = validated_data.pop('start_year')
         end = validated_data.pop('end_year')
+        
         day = validated_data.pop('day')
+        lecture = validated_data.pop('lecture')
+        school_class = validated_data.pop('school_class')
+        
         day_time_data = validated_data.pop('day_time')
-
+        
+        breaks_data = validated_data.pop('breaks')
 
         year_str = f"{start}-{str(end)[-2:]}"
 
         if Tt_year.objects.filter(year=year_str).exists():
             raise serializers.ValidationError("This academic year already exists")
-        
-        tt_year = Tt_year.objects.create(year=year_str)
-        
-        tt_day = Tt_day.objects.create(
-            year = tt_year,
-            day = day.get('day'),
-            lecture = day.get('lecture')
+
+        with transaction.atomic():
+            tt_year = Tt_year.objects.create(year=year_str)
+
+            tt_day = Tt_day.objects.create(
+                year=tt_year,
+                day=day,
+                school_class = school_class,
+                lecture=lecture
             )
-        
-        tt_time = Tt_day_time.objects.create(
-            day = tt_day,
-            start = day_time_data.get('start'),
-            end = day_time_data.get('end'),
-            breaks = day_time_data.get('breaks')
-        )
-        
-        
-        return tt_time
+
+            Tt_day_time.objects.create(
+                day=tt_day,
+                start=day_time_data.get('start'),
+                end=day_time_data.get('end')
+            )
+
+            for b in breaks_data:
+                Tt_breaks.objects.create(
+                    day=tt_day,
+                    total_breaks=b.get('total_breaks'),
+                    breaks=b.get('breaks'),
+                    time=b.get('time'),
+                    description=b.get('description')
+                )
+
+        return tt_year  # ✅ FIX: return main object
 
     def to_representation(self, instance):
         days = instance.tt_day_set.all()
@@ -678,7 +701,8 @@ class Tt_yearSerializer(serializers.ModelSerializer):
             "year": instance.year,
             "days": [
                 {
-                    "day": d.day
+                    "day": d.day,
+                    "lecture": d.lecture
                 } for d in days
             ]
         }

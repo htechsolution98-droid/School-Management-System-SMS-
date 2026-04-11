@@ -84,7 +84,7 @@ router.register(r'assignClass', AssignClassView, basename='assignClass')# For CL
 
 # ========= TIME TABLE ROUTER ============
 router.register(r'tt_year', Tt_yearView, basename='tt_year')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
-router.register(r'tt_day', Tt_dayView, basename='tt_day')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
+# router.register(r'tt_day', Tt_dayView, basename='tt_day')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
 router.register(r'tt_daytime', Tt_day_timeView, basename='tt_daytime')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
 
 urlpatterns = [
@@ -107,7 +107,7 @@ urlpatterns = [
     # # for admisiion for link
     # path('admission/',TemplateView.as_view(template_name='admisiom_form.html')),
     
-    # path('payment/',TemplateView.as_view(template_name='payment.html')),
+    path('payment/',TemplateView.as_view(template_name='payment.html')),
     # path('log/',TemplateView.as_view(template_name='login.html')),
     
     # path('in/',TemplateView.as_view(template_name='index.html')),

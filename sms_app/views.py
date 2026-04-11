@@ -1125,10 +1125,10 @@ class Tt_yearView(ModelViewSet):
     queryset = Tt_year.objects.all()
     serializer_class = Tt_yearSerializer
     
-class Tt_dayView(ModelViewSet): 
-    queryset = Tt_day.objects.all()
-    serializer_class = Tt_daySerializer
+# class Tt_dayView(ModelViewSet): 
+#     queryset = Tt_day.objects.all()
+#     serializer_class = Tt_daySerializer
     
 class Tt_day_timeView(ModelViewSet):  
     queryset = Tt_day_time.objects.all()
-    serializer_class = Tt_day_timeSerializer
+    serializer_class = Tt_day_timeSerializer 

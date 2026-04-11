@@ -311,19 +311,25 @@ class AssignClass(models.Model):
 # ========= TIME TABLE MODEL============
     
 class Tt_year(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
     year = models.CharField(max_length=10, null=True, blank=True)
     
 class Tt_day(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
     year = models.ForeignKey(Tt_year, on_delete=models.CASCADE,null=True, blank=True)
     day = models.CharField(max_length=50,null=True,blank=True)
-    school_class = models.ForeignKey(SchoolClass, )
+    school_class = models.ForeignKey(Division,on_delete=models.CASCADE,null=True,blank=True )
     lecture = models.CharField(max_length=50,null=True,blank=True)
 
 class Tt_day_time(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
     day = models.ForeignKey(Tt_day,on_delete=models.CASCADE, null=True, blank=True)
     start = models.TimeField(null=True, blank=True)
     end = models.TimeField(null=True, blank=True)
-    breaks = models.CharField(max_length=5,null=True, blank=True)
 
 class Tt_breaks(models.Model):
-    pass
+    day = models.ForeignKey(Tt_day,on_delete=models.CASCADE, null=True, blank=True)
+    total_breaks = models.IntegerField(null=True, blank=True)
+    breaks = models.IntegerField(null=True, blank=True)
+    time = models.CharField(max_length=50, null= True, blank=True)
+    description = models.CharField(max_length=100,null=True, blank=True)
