@@ -373,6 +373,7 @@ class FeeVerifyView(ModelViewSet):
         return Student.objects.filter(Q(clerk_verified = True) & Q(principle_verified=True))
 
 # =====serializer for School class=====
+# this for only get its public use on Admission fprosecc
 class ClassView(ModelViewSet):
     queryset = SchoolClass.objects.all()
     serializer_class = SchoolClassSerializer
@@ -767,7 +768,7 @@ import string
 class SetDivisionView(ModelViewSet):
     queryset = Division.objects.all()
     serializer_class = SetDivisionSerializer
-    permission_classes = [IsAuthenticated, IsCLerk]
+    # permission_classes = [IsAuthenticated, IsCLerk]
 
     # ✅ GET (LIST with Redis Cache)
     def list(self, request, *args, **kwargs):

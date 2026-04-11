@@ -70,7 +70,36 @@ class SchoolClass(models.Model):
 
     school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
     
-    school_class = models.CharField(max_length=150, blank=True, null=True)
+    CLASS_CHOICES = [
+    ('nursery', 'Nursery'),
+    ('lkg', 'LKG'),
+    ('ukg', 'UKG'),
+
+    ('class1', 'Class 1'),
+    ('class2', 'Class 2'),
+    ('class3', 'Class 3'),
+    ('class4', 'Class 4'),
+    ('class5', 'Class 5'),
+    ('class6', 'Class 6'),
+    ('class7', 'Class 7'),
+    ('class8', 'Class 8'),
+    ('class9', 'Class 9'),
+    ('class10', 'Class 10'),
+
+    # Streams after 10
+    ('class11_science', 'Class 11 Science'),
+    ('class11_arts', 'Class 11 Arts'),
+    ('class11_commerce', 'Class 11 Commerce'),
+
+    ('class12_science', 'Class 12 Science'),
+    ('class12_arts', 'Class 12 Arts'),
+    ('class12_commerce', 'Class 12 Commerce'),
+]
+
+    school_class = models.CharField(
+        max_length=70,
+        choices=CLASS_CHOICES
+    )
 
     def __str__(self):
         return self.school_class

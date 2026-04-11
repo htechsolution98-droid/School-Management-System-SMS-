@@ -193,54 +193,81 @@ from rest_framework import serializers
 from .models import FormField
 import re
 
+import re
+from rest_framework import serializers
+from .models import SchoolClass
 
 
 class SchoolClassSerializer(serializers.ModelSerializer):
+    school_class = serializers.ListField(
+        child=serializers.CharField()
+    )
 
     class Meta:
         model = SchoolClass
-        fields = ['school_class']
-    
-    def validate_school_class(self, value):
-        """
-        Validates that the input is either:
-        - Nursery, LKG, UKG
-        - Class 1, Class 2, ... Class 12, optionally followed by a stream (e.g., Science, Commerce, Arts)
-        """
-        # Accept nursery/lkg/ukg (case-insensitive)
+        fields = ['school', 'school_class']
+
+    def validate_school_class(self, values):
+        validated_classes = []
+
         basic_classes = ['nursery', 'lkg', 'ukg']
-        if value.lower() in basic_classes:
-            return value.title()
-
-        # Accept class 1-12 optionally with stream
         pattern = r'^(Class\s(1[0-2]|[1-9]))(\s[A-Za-z]+)?$'
-        if re.match(pattern, value, re.IGNORECASE):
-            return value.title()
-        
-        raise serializers.ValidationError(
-            "Invalid format. Examples: 'Nursery', 'Class 11 Science', 'Class 5'."
-        )
-    def validate(self, data):
-        school = data.get('school')
-        school_class = data.get('school_class')
 
-        # ⚠️ Important for update case
-        instance = getattr(self, 'instance', None)
+        for value in values:
+            # Normalize
+            value_clean = value.strip()
 
-        queryset = SchoolClass.objects.filter(
-            school=school,
-            school_class__iexact=school_class  # 🔥 case-insensitive check
-        )
+            # Check Nursery/LKG/UKG
+            if value_clean.lower() in basic_classes:
+                validated_classes.append(value_clean.title())
+                continue
 
-        if instance:
-            queryset = queryset.exclude(id=instance.id)
+            # Check Class 1–12
+            if re.match(pattern, value_clean, re.IGNORECASE):
+                validated_classes.append(value_clean.title())
+                continue
 
-        if queryset.exists():
             raise serializers.ValidationError(
-                "Class already exists for this school"
+                f"Invalid class format: {value}"
             )
 
+        return validated_classes
+
+    def validate(self, data):
+        school = data.get('school')
+        class_list = data.get('school_class')
+
+        instance = getattr(self, 'instance', None)
+
+        for school_class in class_list:
+            queryset = SchoolClass.objects.filter(
+                school=school,
+                school_class__iexact=school_class
+            )
+
+            if instance:
+                queryset = queryset.exclude(id=instance.id)
+
+            if queryset.exists():
+                raise serializers.ValidationError(
+                    f"{school_class} already exists for this school"
+                )
+
         return data
+
+    def create(self, validated_data):
+        school = validated_data.get('school')
+        class_list = validated_data.get('school_class')
+
+        objs = [
+            SchoolClass(
+                school=school,
+                school_class=school_class
+            )
+            for school_class in class_list
+        ]
+
+        return SchoolClass.objects.bulk_create(objs)
     
 class FormFieldSerializer(serializers.ModelSerializer):
     class Meta:
@@ -553,12 +580,29 @@ class DivisionSetSerilaizer(serializers.ModelSerializer):
 
 # clerk side verify serializer
 
+class DocumentReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocumentFile
+        fields = ['id', 'label', 'document']
+        
 class ClerkVerifySerializr(serializers.ModelSerializer):
-    field_values = StudentFieldValueReadSerializer(many=True,read_only=True)
+    field_values = StudentFieldValueReadSerializer(many=True, read_only=True)
+    documents = DocumentReadSerializer(many=True, read_only=True)
 
     class Meta:
         model = Student
         fields = '__all__'
+        read_only_fields = [
+            'is_active',
+            'details_done',
+            'principle_verified',
+            'principle_verified_at',
+            'fees_verified',
+            'fees_verified_at',
+            'school',
+            'gr_no',
+            'user'
+        ]
 
 
 
