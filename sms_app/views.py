@@ -936,14 +936,13 @@ from django.core.cache import cache
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
 from rest_framework import status
+from django.core.cache import cache
 
 class SetSubjectView(ModelViewSet):
     queryset = Subject.objects.all()
-
     serializer_class = SetSubjectSerializer
     permission_classes = [IsAuthenticated, IsCLerk]
 
-    # ✅ Restrict queryset to user's school (IMPORTANT)
     def get_queryset(self):
         return Subject.objects.filter(school=self.request.user.school)
 
@@ -954,32 +953,36 @@ class SetSubjectView(ModelViewSet):
 
         instance = serializer.save(school=request.user.school)
 
-        # ✅ Clear cache
         school_id = request.user.school.id
-        school_class = instance.id
+        school_class = instance.SchoolClass_id
 
-        cache.delete(f"subjects_{school_id}_all")
-        cache.delete(f"subjects_{school_id}_{school_class}")
+        try:
+            cache.delete(f"subjects_{school_id}_all")
+            cache.delete(f"subjects_{school_id}_{school_class}")
+        except Exception:
+            pass
 
         return Response({
             "message": "Subject created successfully",
-            # "data": serializer.data
         }, status=status.HTTP_201_CREATED)
 
-    # ✅ LIST (GET ALL WITH CACHE)
+    # ✅ LIST
     def list(self, request, *args, **kwargs):
         school_id = request.user.school.id
         school_class = request.query_params.get("SchoolClass")
 
         cache_key = f"subjects_{school_id}_{school_class if school_class else 'all'}"
 
-        # ✅ Check cache
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            return Response({
-                "message": "Data fetched from cache",
-                "data": cached_data
-            })
+        # 🔐 SAFE CACHE GET
+        try:
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                return Response({
+                    "message": "Data fetched from cache",
+                    "data": cached_data
+                })
+        except Exception:
+            pass
 
         queryset = self.get_queryset()
 
@@ -988,8 +991,11 @@ class SetSubjectView(ModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
 
-        # ✅ Set cache
-        cache.set(cache_key, serializer.data, timeout=60 * 10)
+        # 🔐 SAFE CACHE SET
+        try:
+            cache.set(cache_key, serializer.data, timeout=60 * 10)
+        except Exception:
+            pass
 
         return Response({
             "message": "Data fetched from DB",
@@ -1001,17 +1007,23 @@ class SetSubjectView(ModelViewSet):
         subject_id = kwargs.get("pk")
         cache_key = f"subject_{subject_id}"
 
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            return Response({
-                "message": "Data fetched from cache",
-                "data": cached_data
-            })
+        try:
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                return Response({
+                    "message": "Data fetched from cache",
+                    "data": cached_data
+                })
+        except Exception:
+            pass
 
         instance = self.get_object()
         serializer = self.get_serializer(instance)
 
-        cache.set(cache_key, serializer.data, timeout=60 * 10)
+        try:
+            cache.set(cache_key, serializer.data, timeout=60 * 10)
+        except Exception:
+            pass
 
         return Response({
             "message": "Data fetched from DB",
@@ -1025,18 +1037,24 @@ class SetSubjectView(ModelViewSet):
         school_id = instance.school.id
         school_class = instance.SchoolClass_id
 
-        cache.delete(f"subjects_{school_id}_all")
-        cache.delete(f"subjects_{school_id}_{school_class}")
-        cache.delete(f"subject_{instance.id}")
+        try:
+            cache.delete(f"subjects_{school_id}_all")
+            cache.delete(f"subjects_{school_id}_{school_class}")
+            cache.delete(f"subject_{instance.id}")
+        except Exception:
+            pass
 
     # ✅ DELETE
     def perform_destroy(self, instance):
         school_id = instance.school.id
-        school_class = instance.SchoolClass_id
+        
 
-        cache.delete(f"subjects_{school_id}_all")
-        cache.delete(f"subjects_{school_id}_{school_class}")
-        cache.delete(f"subject_{instance.id}")
+        try:
+            cache.delete(f"subjects_{school_id}_all")
+        
+            cache.delete(f"subject_{instance.id}")
+        except Exception:
+            pass
 
         instance.delete()
     
