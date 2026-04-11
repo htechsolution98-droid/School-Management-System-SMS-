@@ -511,11 +511,14 @@ class FormSubmissionReadSerializer(serializers.ModelSerializer):
         model = Student
         fields = ['id', 'created_at', 'field_values']
         
+        
 # Only for Post method    
 class SetDivisionSerializer(serializers.ModelSerializer):
+    class_name = serializers.CharField(source='SchoolClass.get_school_class_display', read_only=True)
+
     class Meta:
         model = Division
-        fields = ['id','SchoolClass','division','capacity']
+        fields = ['id','SchoolClass','class_name','division','capacity']
         
 
 # =========serializers for set division by clerk========
@@ -757,14 +760,19 @@ class Tt_yearSerializer(serializers.ModelSerializer):
         days = instance.tt_day_set.all()
 
         return {
+            "message": "Table created successfully",
             "id": instance.id,
             "year": instance.year,
             "days": [
                 {
-                    "day": d.day,
-                    "lecture": d.lecture
+                    "id": d.id,
+                    "lecture": d.lecture,
+                    "school_class": d.school_class.id if d.school_class else None,
+                    "day_time": Tt_day_timeSerializer(
+                        d.tt_day_time_set.first()
+                    ).data if d.tt_day_time_set.exists() else None,
+                    "breaks": Tt_breaksSerializer(d.tt_breaks_set.all(), many=True).data
                 } for d in days
             ]
                 
-            
         }

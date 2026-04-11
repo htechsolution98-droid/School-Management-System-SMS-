@@ -83,8 +83,14 @@ class SchoolClass(models.Model):
     ('class6', 'Class 6'),
     ('class7', 'Class 7'),
     ('class8', 'Class 8'),
-    ('class9', 'Class 9'),
-    ('class10', 'Class 10'),
+    
+    ('class9_basic', 'Class 9 Basic Math'),
+    ('class9_standard', 'Class 9 Standard Math'),
+    ('class9_advanced', 'Class 9 Advanced Math'),
+
+    ('class10_basic', 'Class 10 Basic Math'),
+    ('class10_standard', 'Class 10 Standard Math'),
+    ('class10_advanced', 'Class 10 Advanced Math'),
 
     # Streams after 10
     ('class11_science', 'Class 11 Science'),
