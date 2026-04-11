@@ -210,7 +210,7 @@ class SchoolClassSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SchoolClass
-        fields = ['school_class']
+        fields = ['id','school_class']
 
    
 
@@ -553,6 +553,7 @@ class DocumentReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = DocumentFile
         fields = ['id', 'label', 'document']
+        
         
 class ClerkVerifySerializr(serializers.ModelSerializer):
     field_values = StudentFieldValueReadSerializer(many=True, read_only=True)
