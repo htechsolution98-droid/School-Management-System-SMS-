@@ -1080,11 +1080,11 @@ class SyllabusView(ModelViewSet):
         instance = serializer.save(school=request.user.school)
 
         school_id = request.user.school.id
-        school_class = instance.SchoolClass_id
+        # school_class = instance.SchoolClass_id
 
         # ✅ Clear cache
         cache.delete(f"syllabus_{school_id}_all")
-        cache.delete(f"syllabus_{school_id}_{school_class}")
+        # cache.delete(f"syllabus_{school_id}_{school_class}")
 
         return Response({
             "message": "Syllabus created successfully",
