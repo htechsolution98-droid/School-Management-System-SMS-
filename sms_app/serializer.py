@@ -197,78 +197,70 @@ import re
 from rest_framework import serializers
 from .models import SchoolClass
 
+import re
+from rest_framework import serializers
+from .models import SchoolClass
+
+import re
+from rest_framework import serializers
+from .models import SchoolClass
+
 
 class SchoolClassSerializer(serializers.ModelSerializer):
-    school_class = serializers.ListField(
-        child=serializers.CharField()
-    )
 
     class Meta:
         model = SchoolClass
-        fields = ['school', 'school_class']
+        fields = ['school_class']
 
-    def validate_school_class(self, values):
-        validated_classes = []
+    def validate_school_class(self, value):
+        """
+        Valid formats:
+        - Nursery, LKG, UKG
+        - Class 1 to Class 12
+        - Class 11 Science / Commerce / Arts (optional stream)
+        """
+
+        value_clean = value.strip()
 
         basic_classes = ['nursery', 'lkg', 'ukg']
-        pattern = r'^(Class\s(1[0-2]|[1-9]))(\s[A-Za-z]+)?$'
+        pattern = r'^(Class\s(1[0-2]|[1-9]))(\s(Science|Commerce|Arts))?$'
 
-        for value in values:
-            # Normalize
-            value_clean = value.strip()
+        # Nursery, LKG, UKG
+        if value_clean.lower() in basic_classes:
+            return value_clean.title()
 
-            # Check Nursery/LKG/UKG
-            if value_clean.lower() in basic_classes:
-                validated_classes.append(value_clean.title())
-                continue
+        # Class 1–12 (+ optional stream)
+        if re.match(pattern, value_clean, re.IGNORECASE):
+            return value_clean.title()
 
-            # Check Class 1–12
-            if re.match(pattern, value_clean, re.IGNORECASE):
-                validated_classes.append(value_clean.title())
-                continue
-
-            raise serializers.ValidationError(
-                f"Invalid class format: {value}"
-            )
-
-        return validated_classes
+        raise serializers.ValidationError(
+            f"Invalid class format: {value}"
+        )
 
     def validate(self, data):
-        school = data.get('school')
-        class_list = data.get('school_class')
+        request = self.context.get('request')
+        school = request.user.school
+        school_class = data.get('school_class')
 
-        instance = getattr(self, 'instance', None)
-
-        for school_class in class_list:
-            queryset = SchoolClass.objects.filter(
-                school=school,
-                school_class__iexact=school_class
+        # Prevent duplicate in DB
+        if SchoolClass.objects.filter(
+            school=school,
+            school_class__iexact=school_class
+        ).exists():
+            raise serializers.ValidationError(
+                f"{school_class} already exists"
             )
-
-            if instance:
-                queryset = queryset.exclude(id=instance.id)
-
-            if queryset.exists():
-                raise serializers.ValidationError(
-                    f"{school_class} already exists for this school"
-                )
 
         return data
 
     def create(self, validated_data):
-        school = validated_data.get('school')
-        class_list = validated_data.get('school_class')
+        request = self.context.get('request')
+        school = request.user.school
 
-        objs = [
-            SchoolClass(
-                school=school,
-                school_class=school_class
-            )
-            for school_class in class_list
-        ]
-
-        return SchoolClass.objects.bulk_create(objs)
-    
+        return SchoolClass.objects.create(
+            school=school,
+            school_class=validated_data['school_class']
+        )
 class FormFieldSerializer(serializers.ModelSerializer):
     class Meta:
         model = FormField

@@ -378,52 +378,73 @@ class ClassView(ModelViewSet):
     queryset = SchoolClass.objects.all()
     serializer_class = SchoolClassSerializer
     http_method_names = ['get']
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+
+from .models import SchoolClass
+# from .serializers import SchoolClassSerializer
+
 
 class SchoolClassView(ModelViewSet):
     queryset = SchoolClass.objects.all()
     serializer_class = SchoolClassSerializer
-    permission_classes = [IsAuthenticated, Isprincipal]
-    
-    
-    def list(self, request, *args, **kwargs):
-        school_id = request.user.school.id
-        cache_key = f"school_classes_{school_id}"
+    permission_classes = [IsAuthenticated]
 
-        data = cache.get(cache_key)
-        
-        if data:
-            print("cach")
+    def get_queryset(self):
+        # ✅ only show classes of logged-in user's school
+        return SchoolClass.objects.filter(school=self.request.user.school)
 
-        if not data:
-            queryset = self.get_queryset()
-            serializer = self.get_serializer(queryset, many=True)
-            data = serializer.data
-
-            cache.set(cache_key, data, timeout=60*10)
-
-        return Response(data)
-
-    def perform_create(self, serializer):
-        serializer.save(school=self.request.user.school)
-
-        instance = serializer.save()
-        cache.delete(f"school_classes_{instance.school.id}")
-
-    def perform_update(self, serializer):
-        instance = serializer.save()
-        cache.delete(f"school_classes_{instance.school.id}")
-
-    def perform_destroy(self, instance):
-        school_id = instance.school.id
-        instance.delete()
-        cache.delete(f"school_classes_{school_id}")
-        
     def create(self, request, *args, **kwargs):
-        super().create(request, *args, **kwargs)
-        return Response({
-            "message": "Class created Successfully"
-        }, status=201)
-# ========================================
+        # ✅ accept multiple objects
+        serializer = self.get_serializer(data=request.data, many=True)
+        serializer.is_valid(raise_exception=True)
+
+        # save with school
+        serializer.save()
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+#     def list(self, request, *args, **kwargs):
+#         school_id = request.user.school.id
+#         cache_key = f"school_classes_{school_id}"
+
+#         data = cache.get(cache_key)
+        
+#         if data:
+#             print("cach")
+
+#         if not data:
+#             queryset = self.get_queryset()
+#             serializer = self.get_serializer(queryset, many=True)
+#             data = serializer.data
+
+#             cache.set(cache_key, data, timeout=60*10)
+
+#         return Response(data)
+
+#     def perform_create(self, serializer):
+#         serializer.save(school=self.request.user.school)
+
+#         instance = serializer.save()
+#         cache.delete(f"school_classes_{instance.school.id}")
+
+#     def perform_update(self, serializer):
+#         instance = serializer.save()
+#         cache.delete(f"school_classes_{instance.school.id}")
+
+#     def perform_destroy(self, instance):
+#         school_id = instance.school.id
+#         instance.delete()
+#         cache.delete(f"school_classes_{school_id}")
+        
+#     def create(self, request, *args, **kwargs):
+#         super().create(request, *args, **kwargs)
+#         return Response({
+#             "message": "Class created Successfully"
+#         }, status=201)
+# # ========================================
     
 # ========= admissions process views ========
 from rest_framework import status
