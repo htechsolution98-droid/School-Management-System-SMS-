@@ -789,7 +789,7 @@ import string
 class SetDivisionView(ModelViewSet):
     queryset = Division.objects.all()
     serializer_class = SetDivisionSerializer
-    # permission_classes = [IsAuthenticated, IsCLerk]
+    permission_classes = [IsAuthenticated, IsCLerk]
 
     # ✅ GET (LIST with Redis Cache)
     def list(self, request, *args, **kwargs):
@@ -930,6 +930,8 @@ from rest_framework.response import Response
 from rest_framework import status
 
 class SetSubjectView(ModelViewSet):
+    queryset = Subject.objects.all()
+
     serializer_class = SetSubjectSerializer
     permission_classes = [IsAuthenticated, IsCLerk]
 
@@ -1037,6 +1039,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 class SyllabusView(ModelViewSet):
+    queryset = Syllabus.objects.all()
     serializer_class = SyllabusSerializer
 
     # ✅ Restrict to user's school

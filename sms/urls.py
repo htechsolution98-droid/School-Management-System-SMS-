@@ -70,7 +70,8 @@ router.register(r'StudentDataview', FormSubmissionReadView, basename='StudentDat
 
 
 # =====verify api===== after admission sudmission
-router.register(r'ClerkVerify', ClerkVerifyView, basename='ClerkVerifyView') # For solve submission details METHOD [GET,PUT]
+router.register(r'clerk_doc_fields_check', ClerkVerifyView, basename='ClerkVerifyView') # For solve submission details METHOD [GET,PUT]
+
 router.register(r'PrincipleVerifyView', PrincipleVerifyView, basename='PrincipleVerifyView') # ask
 router.register(r'FeeVerifyView', FeeVerifyView, basename='FeeVerifyView')# ask
 

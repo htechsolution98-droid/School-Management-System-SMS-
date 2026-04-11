@@ -515,7 +515,7 @@ class FormSubmissionReadSerializer(serializers.ModelSerializer):
 class SetDivisionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Division
-        fields = ['SchoolClass','division','capacity']
+        fields = ['id','SchoolClass','division','capacity']
         
 
 # =========serializers for set division by clerk========
@@ -546,8 +546,14 @@ class DivisionSetSerilaizer(serializers.ModelSerializer):
         
         return students
         
-
+# ==========CLERK UPDATE AND VERIFY DATA===============GET,PUT
 # clerk side verify serializer
+class StudentFieldValueReadSerializerForClerk(serializers.ModelSerializer):
+    field_label = serializers.CharField(source='field.label', read_only=True)
+
+    class Meta:
+        model = StudentFieldValue
+        fields = ['id', 'field', 'field_label', 'value']
 
 class DocumentReadSerializer(serializers.ModelSerializer):
     class Meta:
@@ -556,12 +562,12 @@ class DocumentReadSerializer(serializers.ModelSerializer):
         
         
 class ClerkVerifySerializr(serializers.ModelSerializer):
-    field_values = StudentFieldValueReadSerializer(many=True, read_only=True)
-    documents = DocumentReadSerializer(many=True, read_only=True)
+    field_values = StudentFieldValueReadSerializerForClerk(many=True)
+    documents = DocumentReadSerializer(many=True)
 
     class Meta:
         model = Student
-        fields = '__all__'
+        fields = ['mobile','school_class','division','clerk_verified','clerk_verified_at','documents','field_values']
         read_only_fields = [
             'is_active',
             'details_done',
@@ -574,7 +580,47 @@ class ClerkVerifySerializr(serializers.ModelSerializer):
             'user'
         ]
 
+    def update(self, instance, validated_data):
+        field_values_data = validated_data.pop('field_values', [])
+        documents_data = validated_data.pop('documents', [])
 
+        # 🔹 Update main Student fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # 🔹 Update Field Values
+        for field_data in field_values_data:
+            field_id = field_data.get('field')
+            value = field_data.get('value')
+
+            StudentFieldValue.objects.update_or_create(
+                student=instance,
+                field_id=field_id,
+                defaults={'value': value}
+            )
+
+        # 🔹 Update Documents
+        for doc_data in documents_data:
+            doc_id = doc_data.get('id', None)
+
+            if doc_id:
+                # Update existing document
+                doc = DocumentFile.objects.get(id=doc_id, student=instance)
+                doc.label = doc_data.get('label', doc.label)
+                if doc_data.get('document'):
+                    doc.document = doc_data.get('document')
+                doc.save()
+            else:
+                # Create new document
+                DocumentFile.objects.create(
+                    student=instance,
+                    label=doc_data.get('label'),
+                    document=doc_data.get('document')
+                )
+
+        return instance
+# ====================================================================
 
 class PrincipleVerifySerializr(serializers.ModelSerializer):
     field_values = StudentFieldValueReadSerializer(many=True,read_only=True)
@@ -709,7 +755,6 @@ class Tt_yearSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         days = instance.tt_day_set.all()
-        breaks = instance.Tt_breaks_set.all()
 
         return {
             "id": instance.id,
@@ -719,13 +764,6 @@ class Tt_yearSerializer(serializers.ModelSerializer):
                     "day": d.day,
                     "lecture": d.lecture
                 } for d in days
-            ],
-            "breaks":[
-                {
-                    "total_breaks":j.total_breaks,
-                    "breaks":j.breaks,
-                    "time":j.time
-                }for j in breaks
             ]
                 
             
