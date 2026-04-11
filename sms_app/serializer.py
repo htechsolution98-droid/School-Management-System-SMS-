@@ -212,30 +212,7 @@ class SchoolClassSerializer(serializers.ModelSerializer):
         model = SchoolClass
         fields = ['school_class']
 
-    def validate_school_class(self, value):
-        """
-        Valid formats:
-        - Nursery, LKG, UKG
-        - Class 1 to Class 12
-        - Class 11 Science / Commerce / Arts (optional stream)
-        """
-
-        value_clean = value.strip()
-
-        basic_classes = ['nursery', 'lkg', 'ukg']
-        pattern = r'^(Class\s(1[0-2]|[1-9]))(\s(Science|Commerce|Arts))?$'
-
-        # Nursery, LKG, UKG
-        if value_clean.lower() in basic_classes:
-            return value_clean.title()
-
-        # Class 1–12 (+ optional stream)
-        if re.match(pattern, value_clean, re.IGNORECASE):
-            return value_clean.title()
-
-        raise serializers.ValidationError(
-            f"Invalid class format: {value}"
-        )
+   
 
     def validate(self, data):
         request = self.context.get('request')
@@ -656,7 +633,7 @@ class Tt_yearSerializer(serializers.ModelSerializer):
     day = serializers.CharField(write_only=True)
     lecture = serializers.CharField(write_only=True)
     school_class = serializers.PrimaryKeyRelatedField(
-        queryset=Division.objects.all(),
+        queryset=SchoolClass.objects.all(),
         write_only=True
     )    
     day_time = Tt_day_timeSerializer(write_only=True)
@@ -731,6 +708,7 @@ class Tt_yearSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         days = instance.tt_day_set.all()
+        breaks = instance.Tt_breaks_set.all()
 
         return {
             "id": instance.id,
@@ -740,5 +718,14 @@ class Tt_yearSerializer(serializers.ModelSerializer):
                     "day": d.day,
                     "lecture": d.lecture
                 } for d in days
+            ],
+            "breaks":[
+                {
+                    "total_breaks":j.total_breaks,
+                    "breaks":j.breaks,
+                    "time":j.time
+                }for j in breaks
             ]
+                
+            
         }

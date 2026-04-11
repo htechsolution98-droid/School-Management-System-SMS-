@@ -347,7 +347,7 @@ class Tt_day(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
     year = models.ForeignKey(Tt_year, on_delete=models.CASCADE,null=True, blank=True)
     day = models.CharField(max_length=50,null=True,blank=True)
-    school_class = models.ForeignKey(Division,on_delete=models.CASCADE,null=True,blank=True )
+    school_class = models.ForeignKey(SchoolClass,on_delete=models.CASCADE,null=True,blank=True )
     lecture = models.CharField(max_length=50,null=True,blank=True)
 
 class Tt_day_time(models.Model):

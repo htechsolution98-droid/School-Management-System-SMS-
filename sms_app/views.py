@@ -397,7 +397,7 @@ class SchoolClassView(ModelViewSet):
         return SchoolClass.objects.filter(school=self.request.user.school)
 
     def create(self, request, *args, **kwargs):
-        # ✅ accept multiple objects
+        # ✅ accept multiple objects   
         serializer = self.get_serializer(data=request.data, many=True)
         serializer.is_valid(raise_exception=True)
 
