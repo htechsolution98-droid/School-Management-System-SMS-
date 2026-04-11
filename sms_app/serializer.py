@@ -674,6 +674,13 @@ class Tt_breaksSerializer(serializers.ModelSerializer):
         read_only_fields = ['day']
 
 
+class Tt_slotSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tt_slot
+        fields = ['id', 'lecture', 'slot']
+        read_only_fields = ['id', 'lecture']
+
+
 from django.db import transaction
 
 class Tt_yearSerializer(serializers.ModelSerializer):
@@ -688,15 +695,17 @@ class Tt_yearSerializer(serializers.ModelSerializer):
     )    
     day_time = Tt_day_timeSerializer(write_only=True)
     breaks = Tt_breaksSerializer(write_only=True, many=True)
+    slot = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
 
     class Meta:
         model = Tt_year
-        fields = ['id', 'year', 'start_year', 'end_year', 'day', 'lecture','school_class','day_time', 'breaks']
+        fields = ['id', 'year', 'start_year', 'end_year', 'day', 'lecture','school_class','day_time', 'breaks', 'slot']
         read_only_fields = ['year']
 
     def validate(self, data):
         start = data.get('start_year')
         end = data.get('end_year')
+        slot_data = data.get('slot', [])
 
         if len(str(start)) != 4 or len(str(end)) != 4:
             raise serializers.ValidationError("Year must be 4 digits")
@@ -710,11 +719,17 @@ class Tt_yearSerializer(serializers.ModelSerializer):
         if end != start + 1:
             raise serializers.ValidationError("End year must be start_year + 1")
 
+        for item in slot_data:
+            if 'slot' not in item or 'start' not in item or 'end' not in item:
+                raise serializers.ValidationError("Each slot must have slot, start and end")
+
         return data
 
     def create(self, validated_data):
         start = validated_data.pop('start_year')
         end = validated_data.pop('end_year')
+        request = self.context.get('request')
+        school = getattr(getattr(request, 'user', None), 'school', None)
         
         day = validated_data.pop('day')
         lecture = validated_data.pop('lecture')
@@ -723,6 +738,7 @@ class Tt_yearSerializer(serializers.ModelSerializer):
         day_time_data = validated_data.pop('day_time')
         
         breaks_data = validated_data.pop('breaks')
+        slot_data = validated_data.pop('slot', [])
 
         year_str = f"{start}-{str(end)[-2:]}"
 
@@ -730,9 +746,10 @@ class Tt_yearSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("This academic year already exists")
 
         with transaction.atomic():
-            tt_year = Tt_year.objects.create(year=year_str)
+            tt_year = Tt_year.objects.create(year=year_str, school=school)
 
             tt_day = Tt_day.objects.create(
+                school=school,
                 year=tt_year,
                 day=day,
                 school_class = school_class,
@@ -740,6 +757,7 @@ class Tt_yearSerializer(serializers.ModelSerializer):
             )
 
             Tt_day_time.objects.create(
+                school=school,
                 day=tt_day,
                 start=day_time_data.get('start'),
                 end=day_time_data.get('end')
@@ -754,6 +772,18 @@ class Tt_yearSerializer(serializers.ModelSerializer):
                     description=b.get('description')
                 )
 
+            for item in slot_data:
+                Tt_slot.objects.create(
+                    school=school,
+                    day=tt_day,
+                    lecture=str(item.get('slot')),
+                    slot={
+                        'slot': item.get('slot'),
+                        'start': item.get('start'),
+                        'end': item.get('end')
+                    }
+                )
+
         return tt_year  # ✅ FIX: return main object
 
     def to_representation(self, instance):
@@ -766,12 +796,14 @@ class Tt_yearSerializer(serializers.ModelSerializer):
             "days": [
                 {
                     "id": d.id,
+                    "day": d.day,
                     "lecture": d.lecture,
                     "school_class": d.school_class.id if d.school_class else None,
                     "day_time": Tt_day_timeSerializer(
                         d.tt_day_time_set.first()
                     ).data if d.tt_day_time_set.exists() else None,
-                    "breaks": Tt_breaksSerializer(d.tt_breaks_set.all(), many=True).data
+                    "breaks": Tt_breaksSerializer(d.tt_breaks_set.all(), many=True).data,
+                    "slot": Tt_slotSerializer(d.tt_slot_set.all(), many=True).data
                 } for d in days
             ]
                 

@@ -368,3 +368,13 @@ class Tt_breaks(models.Model):
     breaks = models.IntegerField(null=True, blank=True)
     time = models.CharField(max_length=50, null= True, blank=True)
     description = models.CharField(max_length=100,null=True, blank=True)
+
+
+class Tt_slot(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+    day = models.ForeignKey(Tt_day, on_delete=models.CASCADE, null=True, blank=True)
+    lecture = models.CharField(max_length=50, null=True, blank=True)
+    slot = models.JSONField(null=True, blank=True)
+
+
+

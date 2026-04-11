@@ -789,83 +789,83 @@ import string
 class SetDivisionView(ModelViewSet):
     queryset = Division.objects.all()
     serializer_class = SetDivisionSerializer
-    # permission_classes = [IsAuthenticated, IsCLerk]
+    permission_classes = [IsAuthenticated, IsCLerk]
 
-    # # ✅ GET (LIST with Redis Cache)
-    # def list(self, request, *args, **kwargs):
-    #     school_id = request.user.school.id
+    # ✅ GET (LIST with Redis Cache)
+    def list(self, request, *args, **kwargs):
+        school_id = request.user.school.id
 
-    #     cache_key = f"divisions_school_{school_id}"
+        cache_key = f"divisions_school_{school_id}"
 
-    #     # ✅ Check Cache
-    #     cached_data = cache.get(cache_key)
-    #     # if cached_data:
-    #     #     return Response({
-    #     #         "message": "Data fetched from cache",
-    #     #         "data": cached_data
-    #     #     })
+        # ✅ Check Cache
+        cached_data = cache.get(cache_key)
+        # if cached_data:
+        #     return Response({
+        #         "message": "Data fetched from cache",
+        #         "data": cached_data
+        #     })
 
-    #     # ✅ Fetch from DB
-    #     queryset = Division.objects.filter(school_id=school_id)
-    #     serializer = self.get_serializer(queryset, many=True)
+        # ✅ Fetch from DB
+        queryset = Division.objects.filter(school_id=school_id)
+        serializer = self.get_serializer(queryset, many=True)
 
-    #     # ✅ Store in Redis
-    #     cache.set(cache_key, serializer.data, timeout=60 * 10)
+        # ✅ Store in Redis
+        cache.set(cache_key, serializer.data, timeout=60 * 10)
 
-    #     return Response(serializer.data)
+        return Response(serializer.data)
 
-    # # ✅ CREATE (already done, just kept here)
-    # def create(self, request, *args, **kwargs):
-    #     division_count = request.data.get('division')
-    #     school_class = request.data.get('SchoolClass')
-    #     capacity = request.data.get('capacity')
+    # ✅ CREATE (already done, just kept here)
+    def create(self, request, *args, **kwargs):
+        division_count = request.data.get('division')
+        school_class = request.data.get('SchoolClass')
+        capacity = request.data.get('capacity')
 
-    #     if not division_count:
-    #         return Response({"error": "division is required"}, status=400)
+        if not division_count:
+            return Response({"error": "division is required"}, status=400)
 
-    #     if not school_class:
-    #         return Response({"error": "SchoolClass is required"}, status=400)
+        if not school_class:
+            return Response({"error": "SchoolClass is required"}, status=400)
 
-    #     if not capacity:
-    #         return Response({"error": "capacity is required"}, status=400)
+        if not capacity:
+            return Response({"error": "capacity is required"}, status=400)
 
-    #     try:
-    #         division_count = int(division_count)
-    #         capacity = int(capacity)
-    #     except ValueError:
-    #         return Response({"error": "division and capacity must be integers"}, status=400)
+        try:
+            division_count = int(division_count)
+            capacity = int(capacity)
+        except ValueError:
+            return Response({"error": "division and capacity must be integers"}, status=400)
 
-    #     if division_count <= 0 or division_count > 26:
-    #         return Response({"error": "division must be between 1 and 26"}, status=400)
+        if division_count <= 0 or division_count > 26:
+            return Response({"error": "division must be between 1 and 26"}, status=400)
 
-    #     existing = Division.objects.filter(SchoolClass_id=school_class).count()
-    #     if existing > 0:
-    #         return Response(
-    #             {"error": "Divisions already exist for this class"},
-    #             status=400
-    #         )
+        existing = Division.objects.filter(SchoolClass_id=school_class).count()
+        if existing > 0:
+            return Response(
+                {"error": "Divisions already exist for this class"},
+                status=400
+            )
 
-    #     alphabet = list(string.ascii_uppercase[:division_count])
+        alphabet = list(string.ascii_uppercase[:division_count])
 
-    #     divisions = []
-    #     for a in alphabet:
-    #         obj = Division.objects.create(
-    #             SchoolClass_id=school_class,
-    #             division=a,
-    #             school=self.request.user.school,
-    #             capacity=capacity,
-    #         )
-    #         divisions.append(obj)
+        divisions = []
+        for a in alphabet:
+            obj = Division.objects.create(
+                SchoolClass_id=school_class,
+                division=a,
+                school=self.request.user.school,
+                capacity=capacity,
+            )
+            divisions.append(obj)
 
-    #     # ✅ Clear Cache
-    #     cache.delete(f"divisions_{school_class}")
+        # ✅ Clear Cache
+        cache.delete(f"divisions_{school_class}")
 
-    #     serializer = self.get_serializer(divisions, many=True)
+        serializer = self.get_serializer(divisions, many=True)
 
-    #     return Response({
-    #         "message": "Division created Successfully",
-    #         "data": serializer.data
-    #     }, status=status.HTTP_201_CREATED)
+        return Response({
+            "message": "Division created Successfully",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
 
 
     # ✅ UPDATE (clear cache)
