@@ -785,36 +785,41 @@ from rest_framework.viewsets import ModelViewSet
 from django.core.cache import cache
 import string
 
+from django.core.cache import cache
+import string
 
 class SetDivisionView(ModelViewSet):
     queryset = Division.objects.all()
     serializer_class = SetDivisionSerializer
     permission_classes = [IsAuthenticated, IsCLerk]
 
-    # ✅ GET (LIST with Redis Cache)
+    # ✅ GET (LIST with safe cache)
     def list(self, request, *args, **kwargs):
         school_id = request.user.school.id
-
         cache_key = f"divisions_school_{school_id}"
 
-        # ✅ Check Cache
-        cached_data = cache.get(cache_key)
-        # if cached_data:
-        #     return Response({
-        #         "message": "Data fetched from cache",
-        #         "data": cached_data
-        #     })
+        try:
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                return Response({
+                    "message": "Data fetched from cache",
+                    "data": cached_data
+                })
+        except Exception:
+            pass  # 🚀 Ignore Redis error
 
-        # ✅ Fetch from DB
         queryset = Division.objects.filter(school_id=school_id)
         serializer = self.get_serializer(queryset, many=True)
 
-        # ✅ Store in Redis
-        cache.set(cache_key, serializer.data, timeout=60 * 10)
+        try:
+            cache.set(cache_key, serializer.data, timeout=60 * 10)
+        except Exception:
+            pass  # 🚀 Ignore Redis error
 
         return Response(serializer.data)
 
-    # ✅ CREATE (already done, just kept here)
+
+    # ✅ CREATE
     def create(self, request, *args, **kwargs):
         division_count = request.data.get('division')
         school_class = request.data.get('SchoolClass')
@@ -840,10 +845,7 @@ class SetDivisionView(ModelViewSet):
 
         existing = Division.objects.filter(SchoolClass_id=school_class).count()
         if existing > 0:
-            return Response(
-                {"error": "Divisions already exist for this class"},
-                status=400
-            )
+            return Response({"error": "Divisions already exist for this class"}, status=400)
 
         alphabet = list(string.ascii_uppercase[:division_count])
 
@@ -857,8 +859,11 @@ class SetDivisionView(ModelViewSet):
             )
             divisions.append(obj)
 
-        # ✅ Clear Cache
-        cache.delete(f"divisions_{school_class}")
+        # ✅ Clear Cache (SAFE)
+        try:
+            cache.delete(f"divisions_school_{request.user.school.id}")
+        except Exception:
+            pass
 
         serializer = self.get_serializer(divisions, many=True)
 
@@ -868,21 +873,24 @@ class SetDivisionView(ModelViewSet):
         }, status=status.HTTP_201_CREATED)
 
 
-    # ✅ UPDATE (clear cache)
+    # ✅ UPDATE (SAFE cache clear)
     def perform_update(self, serializer):
         instance = serializer.save()
 
-        cache_key = f"divisions_{instance.SchoolClass_id}"
-        cache.delete(cache_key)
+        try:
+            cache.delete(f"divisions_school_{instance.school.id}")
+        except Exception:
+            pass
 
 
-    # ✅ DELETE (clear cache)
+    # ✅ DELETE (SAFE cache clear)
     def perform_destroy(self, instance):
-        cache_key = f"divisions_{instance.SchoolClass_id}"
-        cache.delete(cache_key)
+        try:
+            cache.delete(f"divisions_school_{instance.school.id}")
+        except Exception:
+            pass
 
         instance.delete()
-    
     
 
 # This Logic perfom with button after admission and complete and division is set    
