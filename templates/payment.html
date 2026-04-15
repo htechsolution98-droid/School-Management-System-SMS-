@@ -5,37 +5,64 @@
 </head>
 <body>
 
-<h2>Pay Now</h2>
-<button onclick="startPayment()">Pay ₹500</button>
+<h2>Pay ₹500</h2>
+
+<!-- Payment Mode Selection -->
+<label>
+    <input type="radio" name="payment_mode" value="online"> Online
+</label>
+
+<label>
+    <input type="radio" name="payment_mode" value="offline"> Offline
+</label>
+
+<br><br>
+
+<button onclick="submitPayment()">Submit</button>
 
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
 <script>
-function startPayment() {
+function submitPayment() {
 
-    // Step 1: Create Order
-    fetch("http://127.0.0.1:8000/razor/order/", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ amount: 500 })
-    })
-    .then(res => res.json())
-    .then(data => {
+    let mode = document.querySelector('input[name="payment_mode"]:checked');
 
-        var options = {
-            "key": "rzp_test_SFctsjgfvcrQ6h",
+    if (!mode) {
+        alert("Please select payment mode");
+        return;
+    }
+
+    if (mode.value === "online") {
+        startOnlinePayment();
+    } else {
+        submitOfflinePayment();
+    }
+}
+
+// ✅ ONLINE PAYMENT (Razorpay)
+        function startOnlinePayment() {
+
+            fetch("http://127.0.0.1:8000/razor/order/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ amount: 500, student_id: 1, form_id:1 })
+            })
+            .then(res => res.json())
+            .then(data => {
+
+            var options = {
+            "key": data.key,              // ✅ from backend
             "amount": data.amount,
             "currency": "INR",
             "name": "My App",
             "description": "Test Payment",
-            "order_id": data.id,
+            "order_id": data.id,          // ✅ now correct
 
-            // Step 2: Payment Success
             "handler": function (response){
+                console.log(response);    // 🔥 DEBUG THIS
 
-                // Step 3: Verify Payment
                 fetch("http://127.0.0.1:8000/payment/verify/", {
                     method: "POST",
                     headers: {
@@ -44,22 +71,37 @@ function startPayment() {
                     body: JSON.stringify({
                         razorpay_order_id: response.razorpay_order_id,
                         razorpay_payment_id: response.razorpay_payment_id,
-                        razorpay_signature: response.razorpay_signature
+                        razorpay_signature: response.razorpay_signature,
+                        student_id: data.student_id,
+                        form_id: data.form_id   // if needed
                     })
                 })
-                .then(res => res.json())
-                .then(result => {
-                    if(result.status === "success"){
-                        alert("Payment Verified ✅");
-                    } else {
-                        alert("Payment Failed ❌");
-                    }
-                });
             }
         };
 
         var rzp = new Razorpay(options);
         rzp.open();
+    });
+}
+
+// ✅ OFFLINE PAYMENT
+function submitOfflinePayment() {
+
+    fetch("http://127.0.0.1:8000/offline/payment/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            amount: 500,
+            student_id: 1,
+            form_id:1,
+            school:1
+        })
+    })
+    .then(res => res.json())
+    .then(result => {
+        alert("Offline payment submitted ");
     });
 }
 </script>

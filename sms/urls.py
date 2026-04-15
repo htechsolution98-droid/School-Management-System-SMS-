@@ -73,7 +73,7 @@ router.register(r'StudentDataview', FormSubmissionReadView, basename='StudentDat
 router.register(r'clerk_doc_fields_check', ClerkVerifyView, basename='ClerkVerifyView') # For solve submission details METHOD [GET,PUT]
 
 router.register(r'PrincipleVerifyView', PrincipleVerifyView, basename='PrincipleVerifyView') # ask
-router.register(r'FeeVerifyView', FeeVerifyView, basename='FeeVerifyView')# ask
+router.register(r'fee_verify', FeeVerifyView, basename='fee_verify')# ask
 
 router.register(r'setSubject', SetSubjectView, basename='setSubject')# For CLerk add subject METHOD [GET,POST,PUT,DELETE]  ----API Need---  api/schoolclass/ for class drop down
 router.register(r'divisionSet', SetDivisionView, basename='divisionSet') #For Clerk Use METHOD [GET,POST,PUT,DELETE] ----API Need---  api/schoolclass/ for class drop down
@@ -85,8 +85,13 @@ router.register(r'assignClass', AssignClassView, basename='assignClass')# For CL
 
 # ========= TIME TABLE ROUTER ============
 router.register(r'tt_year', Tt_yearView, basename='tt_year')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
+router.register(r'time_table', Time_tableView, basename='time_table')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
 # router.register(r'tt_day', Tt_dayView, basename='tt_day')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
 router.register(r'tt_daytime', Tt_day_timeView, basename='tt_daytime')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
+
+router.register(r'get-student',GetStudentView,basename='get-student')# for get student for principle with filter [school filter add remainig]
+router.register(r'attendance', AttendanceView, basename='attendance')# For attendance tracking METHOD [GET,POST,PUT,DELETE]
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -94,6 +99,10 @@ urlpatterns = [
     path('api/access/',CustomLoginView.as_view()),  
         
     path('api/refresh/',TokenRefreshView.as_view()),
+
+    path('api/get-location/', GetLocationView.as_view()), #for attendance location
+    
+    path('api/set-slot/', SetSlotView),
     
     path('api/fields/<str:unique_link>/', FormFieldViewSet.as_view()),
     
@@ -107,6 +116,7 @@ urlpatterns = [
     
     # # for admisiion for link
     # path('admission/',TemplateView.as_view(template_name='admisiom_form.html')),
+    path('map/',TemplateView.as_view(template_name='map.html')),
     
     path('payment/',TemplateView.as_view(template_name='payment.html')),
     # path('log/',TemplateView.as_view(template_name='login.html')),
@@ -116,6 +126,8 @@ urlpatterns = [
     
     path('razor/order/',RazorpayOrderView.as_view()),
     path('payment/verify/',VerifyPaymentView.as_view()),
+    path('offline/payment/',OffilinePaymentView.as_view()),
+    path('get_receipt/<int:student_id>/<int:form_id>/',get_receipt),
     path('webhook/',RazorpayWebhookView.as_view()),
     
      # Swagger UI

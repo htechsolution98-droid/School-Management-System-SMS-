@@ -1,11 +1,20 @@
 from django.shortcuts import render
 from rest_framework.viewsets import ModelViewSet
-from .models import *
-from .serializer import *
-from rest_framework.permissions import BasePermission ,IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.response import Response
+from django.core.cache import cache
+from django.db import transaction
+from rest_framework.permissions import IsAuthenticated
+
+from sms_app.models import *
+from sms_app.serializer import *
+from rest_framework.permissions import BasePermission, IsAuthenticated
 import random
 import string
-from django.core.mail import send_mail
 from django.contrib.auth.models import Group
 
 from django.conf import settings
@@ -18,11 +27,42 @@ from rest_framework.decorators import api_view
 from django.db.models import Q
 
 from rest_framework_simplejwt.views import TokenObtainPairView
+
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
+
+
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
+from sms_app.models import DocumentFile
+
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
+from sms_app.models import DocumentFile
+
+import hmac
+import hashlib
+from rest_framework import status
+from django.conf import settings
+
+import hmac
+import hashlib
+
+from django.conf import settings
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+# from .serializers import DocumentS
+
+from django.core.cache import cache
+
+
 # Create your views here.
-# set access and refresh token in cookie 
+# set access and refresh token in cookie
 class CustomLoginView(TokenObtainPairView):
     serializer_class = CustomeLoginSerializer
 
@@ -50,25 +90,23 @@ class CustomLoginView(TokenObtainPairView):
     #         )
 
     #     return response
-    
 
-from rest_framework_simplejwt.views  import TokenRefreshView
 
 # class CookieTokenRefreshView(TokenRefreshView):
 #     def post(self, request, *args, **kwargs):
-        
+
 #         refresh_token = request.COOKIES.get('refresh_token')
-        
+
 #         if not refresh_token:
 #             return None
-        
+
 #         request.data['refresh'] = refresh_token
-        
+
 #         response = super().post(request, *args, **kwargs)
-        
+
 #         if response.status_code == 200:
 #             access_token = response.get('access')
-            
+
 #             response.set_cookie(
 #                 key='access_token',
 #                 value=access_token,
@@ -76,71 +114,85 @@ from rest_framework_simplejwt.views  import TokenRefreshView
 #                 secure=False,
 #                 samesite='Lax'
 #             )
-            
+
 #         return response
-            
-            
-#====== CODE for GENERATE ID & CODE =====
+
+
+# ====== CODE for GENERATE ID & CODE =====
 def generate_school_code(name):
-    school_name = name.split(' ')[0]
+    school_name = name.split(" ")[0]
     digit = string.digits
 
-    four_digit = ''.join(random.choices(digit,k=4))
-    school_code = school_name+four_digit
+    four_digit = "".join(random.choices(digit, k=4))
+    school_code = school_name + four_digit
 
-    if School.objects.filter(code = school_code).exists():
+    if School.objects.filter(code=school_code).exists():
         return generate_school_code(name)
 
     return school_code
 
+
 def generate_staff_username(name):
-    Staff_name = name.split(' ')[0]
+    Staff_name = name.split(" ")[0]
     digit = string.digits
 
-    four_digit = ''.join(random.choices(digit,k=4))
-    Staff_username = Staff_name+four_digit
+    four_digit = "".join(random.choices(digit, k=4))
+    Staff_username = Staff_name + four_digit
 
-    if User.objects.filter(username = Staff_username).exists():
+    if User.objects.filter(username=Staff_username).exists():
         return generate_staff_username(name)
 
     return Staff_username
 
-#======END CODE for GENERATE ID & CODE =====
+
+# ======END CODE for GENERATE ID & CODE =====
 
 
 # =========PERMISSIONS===========
 class Is_super_admin(BasePermission):
     def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated and \
-               request.user.groups.filter(name='super_admin').exists()
-    
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.groups.filter(name="super_admin").exists()
+        )
+
 
 class Is_admin_trustee(BasePermission):
     def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated and \
-               request.user.groups.filter(name='admin(trustee)').exists()
-               
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.groups.filter(name="admin(trustee)").exists()
+        )
+
+
 class IsCLerk(BasePermission):
     def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated and \
-               request.user.groups.filter(name='CLERK').exists()
-               
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.groups.filter(name="CLERK").exists()
+        )
+
+
 class Isprincipal(BasePermission):
     def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated and \
-               request.user.groups.filter(name='PRINCIPAL').exists()
-               
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.groups.filter(name="PRINCIPAL").exists()
+        )
+
+
 class Isstudent(BasePermission):
     def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated and \
-               request.user.groups.filter(name='student').exists()
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.groups.filter(name="student").exists()
+        )
 
-
-from rest_framework.viewsets import ModelViewSet
-from rest_framework.response import Response
-from django.core.cache import cache
-from django.db import transaction
-from rest_framework.permissions import IsAuthenticated
 
 class SchoolView(ModelViewSet):
     queryset = School.objects.all()
@@ -175,16 +227,16 @@ class SchoolView(ModelViewSet):
 
     # Create school + clear cache
     def perform_create(self, serializer):
-        name = serializer.validated_data.get('name')
+        name = serializer.validated_data.get("name")
         school_code = generate_school_code(name)
-        
+
         with transaction.atomic():
             user = User.objects.create(username=school_code)
             password = school_code
             user.set_password(password)
             user.save()
 
-            group, created = Group.objects.get_or_create(name='admin(trustee)')
+            group, created = Group.objects.get_or_create(name="admin(trustee)")
             user.groups.add(group)
 
             school = serializer.save(code=school_code, login_id=user)
@@ -207,11 +259,8 @@ class SchoolView(ModelViewSet):
     # 🔹 Custom response
     def create(self, request, *args, **kwargs):
         super().create(request, *args, **kwargs)
-        return Response({
-            "message": "School created Successfully"
-        }, status=201)
+        return Response({"message": "School created Successfully"}, status=201)
 
-from django.core.cache import cache
 
 class StaffView(ModelViewSet):
     queryset = Staff.objects.all()
@@ -235,8 +284,8 @@ class StaffView(ModelViewSet):
 
     # 🔹 Create staff + clear cache
     def perform_create(self, serializer):
-        name = serializer.validated_data.get('name')
-        category = serializer.validated_data.get('category')
+        name = serializer.validated_data.get("name")
+        category = serializer.validated_data.get("category")
 
         group, created = Group.objects.get_or_create(name=category)
 
@@ -270,19 +319,20 @@ class StaffView(ModelViewSet):
 class GetTeacherView(ModelViewSet):
     queryset = Staff.objects.all()
     serializer_class = GetTeacherSerializer
-    http_method_names = ['get']
+    http_method_names = ["get"]
 
     def get_queryset(self):
-        return Staff.objects.filter(user__groups__name = "TEACHER")
-    
+        return Staff.objects.filter(user__groups__name="TEACHER")
+
+
 class StudentSignUpView(ModelViewSet):
     queryset = User.objects.all()
     serializer_class = StudentSignUpSerliazer
-    
-    http_method_names = ['post']
-    
 
-# =============TO ask more=========       
+    http_method_names = ["post"]
+
+
+# =============TO ask more=========
 
 # class FormViewSet(ModelViewSet):
 #     queryset = Form.objects.all()
@@ -311,7 +361,7 @@ class StudentSignUpView(ModelViewSet):
 #             field.save()
 
 #         return Response({"message": "Saved"})
-    
+
 # =============end TO ask more===========
 
 
@@ -332,11 +382,11 @@ class StudentSignUpView(ModelViewSet):
 #             recipient_list=[student.email],
 #         )
 
-       
+
 # class StudentDocumentview(ModelViewSet):
 #     queryset = StudentDocument.objects.all()
 #     serializer_class = StudentDocumentSerializer
-    
+
 #     def get_queryset(self):
 #         queryset = super().get_queryset()
 #         student_id = self.request.query_params.get('student_id')
@@ -345,7 +395,7 @@ class StudentSignUpView(ModelViewSet):
 #             queryset = queryset.filter(student_id=student_id)
 
 #         return queryset
-    
+
 
 class StudentFIllView(ModelViewSet):
     queryset = Student.objects.all()
@@ -355,35 +405,41 @@ class StudentFIllView(ModelViewSet):
 class ClerkVerifyView(ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = ClerkVerifySerializr
-    
+
 
 class PrincipleVerifyView(ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = PrincipleVerifySerializr
-    
+
     def get_queryset(self):
-        return Student.objects.filter(clerk_verified = True)
+        return Student.objects.filter(clerk_verified=True)
 
 
 class FeeVerifyView(ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = FeesVerifySerializr
-    
-    def get_queryset(self):
-        return Student.objects.filter(Q(clerk_verified = True) & Q(principle_verified=True))
+
+    # def get_queryset(self):
+    #     return Student.objects.filter(
+    #         Q(clerk_verified=True) & Q(principle_verified=True)
+    #     )
+
 
 # =====serializer for School class=====
 # this for only get its public use on Admission fprosecc
 class ClassView(ModelViewSet):
     queryset = SchoolClass.objects.all()
     serializer_class = SchoolClassSerializer
-    http_method_names = ['get']
+    http_method_names = ["get"]
+
+
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import SchoolClass
+from sms_app.models import SchoolClass
+
 # from .serializers import SchoolClassSerializer
 
 
@@ -393,11 +449,11 @@ class SchoolClassView(ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # ✅ only show classes of logged-in user's school
+        #  only show classes of logged-in user's school
         return SchoolClass.objects.filter(school=self.request.user.school)
 
     def create(self, request, *args, **kwargs):
-        # ✅ accept multiple objects   
+        #  accept multiple objects
         serializer = self.get_serializer(data=request.data, many=True)
         serializer.is_valid(raise_exception=True)
 
@@ -405,13 +461,14 @@ class SchoolClassView(ModelViewSet):
         serializer.save()
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
+
+
 #     def list(self, request, *args, **kwargs):
 #         school_id = request.user.school.id
 #         cache_key = f"school_classes_{school_id}"
 
 #         data = cache.get(cache_key)
-        
+
 #         if data:
 #             print("cach")
 
@@ -438,23 +495,22 @@ class SchoolClassView(ModelViewSet):
 #         school_id = instance.school.id
 #         instance.delete()
 #         cache.delete(f"school_classes_{school_id}")
-        
+
 #     def create(self, request, *args, **kwargs):
 #         super().create(request, *args, **kwargs)
 #         return Response({
 #             "message": "Class created Successfully"
 #         }, status=201)
 # # ========================================
-    
+
 # ========= admissions process views ========
-from rest_framework import status
 
 # ========= using this serializers principle set DocumentField=========
 
 # class DocumentFieldview(ModelViewSet):
 #     queryset = DocumentField.objects.all()
 #     serializer_class = DocumentFileSerializer
-    
+
 # =====================================================================
 
 
@@ -462,50 +518,52 @@ class AdmissionFormViewSet(ModelViewSet):
     queryset = AdmissionForm.objects.all()
     serializer_class = AdmissionFormSerializer
     permission_classes = [IsAuthenticated]
-    
-    lookup_field = 'unique_link' 
+
+    lookup_field = "unique_link"
     # access form via UUID
 
     def get_queryset(self):
         return AdmissionForm.objects.filter(is_active=True)
-    
+
     def perform_create(self, serializer):
         serializer.save(school=self.request.user.school)
         print(self.request.user)
-     
+
     # def create(self, request, *args, **kwargs):
     #     serializer = super().create(request, *args, **kwargs)
-        
+
     #     return Response({
     #         "meassage":"Form created Successfully"
     #         }, status=status.HTTP_201_CREATED)
-   
-   
+
+
 # ====this view set for view admission form field====
+
 
 class FormFieldViewSet(RetrieveAPIView):
     queryset = AdmissionForm.objects.all()
     serializer_class = AdmissionFormViewSerializer
-    lookup_field = 'unique_link'
-    
+    lookup_field = "unique_link"
+
     def get_queryset(self):
         return AdmissionForm.objects.filter(is_active=True)
+
 
 # ===================================================
 # for admission form status change /
 class FormStatus(ModelViewSet):
     queryset = AdmissionForm.objects.all()
     serializer_class = ChangeFormStatus
-    serializer_class = [IsAuthenticated,Isprincipal]
-    http_method_names = ['patch']
+    serializer_class = [IsAuthenticated, Isprincipal]
+    http_method_names = ["patch"]
 
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
-        is_active = request.data.get('is_active')
+        is_active = request.data.get("is_active")
 
         with transaction.atomic():
             # If setting this form to active
-            if is_active is True or is_active == 'true':
+            if is_active is True or is_active == "true":
                 # Make all other forms inactive
                 AdmissionForm.objects.exclude(id=instance.id).update(is_active=False)
 
@@ -514,61 +572,53 @@ class FormStatus(ModelViewSet):
             serializer.is_valid(raise_exception=True)
             serializer.save()
 
-        return Response({
-            "message": "Form Public successfully",
-            # "data": serializer.data
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "message": "Form Public successfully",
+                # "data": serializer.data
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 # for send form link
-@api_view(['GET'])
+@api_view(["GET"])
 def ShareFormLink(request):
-    form = AdmissionForm.objects.filter(is_active = True).first()
-    
+    form = AdmissionForm.objects.filter(is_active=True).first()
+
     form_link = f"http://127.0.0.1:8000/admission/{form.unique_link}/"
-    
-    return Response({
-         "form_link":form_link
-    })
-    
+
+    return Response({"form_link": form_link})
+
+
 # this for craete admission link
 def Admission(request, unique_link):
-    form = AdmissionForm.objects.filter(unique_link = unique_link).first()
-    
+    form = AdmissionForm.objects.filter(unique_link=unique_link).first()
+
     if not form:
-        school = School.objects.filter(login_id = form.school )
-        return render(request, "error.html", {"mobile": school.email ,"email":school.phone})
-    
+        school = School.objects.filter(login_id=form.school)
+        return render(
+            request, "error.html", {"mobile": school.email, "email": school.phone}
+        )
+
     # if not form.is_active:
     #     return render(request, "error.html", {"message": "Form Is Not Active"})
-        
-    return render(request, "index.html",{'unique_link':unique_link})
 
-    
+    return render(request, "index.html", {"unique_link": unique_link})
+
+
 class FormSubmissionViewSet(ModelViewSet):
     queryset = Student.objects.all()
     # serializer_class = [Isstudent]
     serializer_class = FormSubmissionSerializer
-    
+
     # def get_serializer_class(self):
     #     if self.action in ['list', 'retrieve']:
     #         return FormSubmissionReadSerializer
     #     return FormSubmissionSerializer
-    
-    # def perform_create(self, serializer):  
+
+    # def perform_create(self, serializer):
     #     serializer.save(user=self.request.user)
-
-
-    
-from rest_framework.viewsets import ModelViewSet
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.response import Response
-from .models import DocumentFile
-
-from rest_framework.viewsets import ModelViewSet
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.response import Response
-from .models import DocumentFile
-# from .serializers import DocumentSubmissionSerialiser
 
 
 class DocumentSubmissionView(ModelViewSet):
@@ -577,22 +627,19 @@ class DocumentSubmissionView(ModelViewSet):
     parser_classes = [MultiPartParser, FormParser]
 
     def create(self, request, *args, **kwargs):
-        data = request.data  # ✅ NO .copy()
+        data = request.data  # .copy()
 
         documents = []
         i = 0
 
         while True:
-            label = data.get(f'documents[{i}][label]')
-            document = data.get(f'documents[{i}][document]')
+            label = data.get(f"documents[{i}][label]")
+            document = data.get(f"documents[{i}][document]")
 
             if not label and not document:
                 break
 
-            documents.append({
-                "label": label,
-                "document": document
-            })
+            documents.append({"label": label, "document": document})
             i += 1
 
         # ✅ Build new clean dict (important)
@@ -600,106 +647,105 @@ class DocumentSubmissionView(ModelViewSet):
             "form_id": data.get("form_id"),
             "school": data.get("school"),
             "student": data.get("student"),
-            "documents": documents
+            "documents": documents,
         }
 
         serializer = self.get_serializer(data=final_data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
 
-        return Response({
-            "message": "Documents uploaded successfully"
-        })
+        return Response(
+            {
+                "message": "Documents uploaded successfully",
+                "student_id": data.get("student"),
+            }
+        )
+
+
 class FormSubmissionReadView(ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = FormSubmissionReadSerializer
 
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
 
 class CheckMobileAPIView(APIView):
     def post(self, request):
         serializer = MobileCheckSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        mobile = serializer.validated_data['mobile']
+        mobile = serializer.validated_data["mobile"]
 
         student = Student.objects.filter(mobile=mobile).first()
 
-        # ❌ CASE 1: Already used
+        # CASE 1: Already used
         if student and student.details_done:
-            return Response({
-                "status": "used",
-                "message": "This number is already used"
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"status": "used", "message": "This number is already used"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # 🔄 CASE 2: Resume
+        #  CASE 2: Resume
         if student and not student.details_done:
             values = StudentFieldValue.objects.filter(student=student)
 
-            return Response({
-                # "status": "resume",
-                "id": student.id,
-                "mobile": student.mobile,
-                "school": student.school.id if student.school else None,
-                "school_class": student.school_class.id if student.school_class else None,
-                "field_values": [
-                    {
-                        "field": v.field.id,
-                        "value": v.value
-                    }
-                    for v in values
-                ]
-            }, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    # "status": "resume",
+                    "id": student.id,
+                    "mobile": student.mobile,
+                    "school": student.school.id if student.school else None,
+                    "school_class": (
+                        student.school_class.id if student.school_class else None
+                    ),
+                    "field_values": [
+                        {"field": v.field.id, "value": v.value} for v in values
+                    ],
+                },
+                status=status.HTTP_200_OK,
+            )
 
-        # 🆕 CASE 3: New number
-        return Response({
-            "status": "new",
-            "message": "Mobile number is available"
-        }, status=status.HTTP_200_OK)    
-    
-from .razorpay_client import client
+        # CASE 3: New number
+        return Response(
+            {"status": "new", "message": "Mobile number is available"},
+            status=status.HTTP_200_OK,
+        )
+
+
+from sms_app.razorpay_client import client
 from rest_framework.views import APIView
+
 
 class RazorpayOrderView(APIView):
     def post(self, request):
         # user = request.user
-        amount = int(request.data.get('amount')) * 100
-                
+        amount = int(request.data.get("amount")) * 100
+        student_id = request.data.get("student_id")
+        form_id = request.data.get("form_id")
+
         admission_fee = AdmissionFee.objects.create(
             amount=amount / 100,
         )
-        
-        razor_order = client.order.create({
-            "amount":amount,
-            "currency":"INR",
-            "payment_capture":1
-        })
+
+        razor_order = client.order.create(
+            {"amount": amount, "currency": "INR", "payment_capture": 1}
+        )
         admission_fee.razorpay_order_id = razor_order["id"]
         admission_fee.save()
-        
-        return Response({
-            "Order_id":razor_order["id"],
-            "Key":settings.RAZOR_PAY_KEY_ID,
-            "amount":razor_order["amount"]
-        })
-        
 
-import hmac
-import hashlib
-from rest_framework import status
-from django.conf import settings
+        return Response(
+            {
+                "id": razor_order["id"],  # ✅ FIXED
+                "key": settings.RAZOR_PAY_KEY_ID,  # ✅ FIXED
+                "amount": razor_order["amount"],
+                "student_id": student_id,
+                "form_id": form_id,
+            }
+        )
 
-import hmac
-import hashlib
 
-from django.conf import settings
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
+from django.utils import timezone
 
+
+# =======for online payment=========
 class VerifyPaymentView(APIView):
     def post(self, request):
         data = request.data
@@ -707,41 +753,121 @@ class VerifyPaymentView(APIView):
         order_id = data.get("razorpay_order_id")
         payment_id = data.get("razorpay_payment_id")
         signature = data.get("razorpay_signature")
+        form_id = data.get("form_id")
+        student_id = data.get("student_id")
 
+        print("RAZORPAY_ORDER_ID", order_id)
+        print("RAZORPAY_PAYMENT_ID", payment_id)
+        print("RAZORPAY_SIGNATURE", signature)
         if not all([order_id, payment_id, signature]):
-            return Response({"error": "Missing payment parameters"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Missing payment parameters"}, status=400)
 
         secret = settings.RAZOR_PAY_SECRET_KEY
-
         message = f"{order_id}|{payment_id}"
 
         generated_signature = hmac.new(
-            secret.encode(),
-            message.encode(),
-            hashlib.sha256
+            secret.encode(), message.encode(), hashlib.sha256
         ).hexdigest()
 
-        if hmac.compare_digest(generated_signature, signature):
-            try:
-                payment = AdmissionFee.objects.get(razorpay_order_id=order_id)
-            except AdmissionFee.DoesNotExist:
-                return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+        if not hmac.compare_digest(generated_signature, signature):
+            return Response({"status": "failed"}, status=400)
 
+        try:
+            payment = AdmissionFee.objects.get(razorpay_order_id=order_id)
+        except AdmissionFee.DoesNotExist:
+            return Response({"error": "Order not found"}, status=404)
+
+        form_data = AdmissionForm.objects.filter(id=form_id).first()
+        if not form_data:
+            return Response({"error": "Form not found"}, status=404)
+
+        student = Student.objects.filter(id=student_id).first()
+        if not student:
+            return Response({"error": "Student not found"}, status=404)
+
+        if student.details_done:
+            return Response({"error": "Payment process are already done"}, status=404)
+
+        with transaction.atomic():
             payment.razorpay_payment_id = payment_id
             payment.razorpay_signature = signature
-            payment.status = "paid"
+            payment.student = student
+            payment.school = form_data.school  # ✅ correct
+            payment.payment_mode = "online"
+            payment.paid_at = timezone.now()
             payment.save()
 
-            return Response({"status": "success"})
+            student.details_done = True
+            student.save()
 
-        return Response({"status": "failed"}, status=status.HTTP_400_BAD_REQUEST)
-    
+        return Response({"status": "success"})
+
+
+class OffilinePaymentView(APIView):
+    def post(self, request):
+        data = request.data
+
+        amount = int(request.data.get("amount"))
+
+        form_id = data.get("form_id")
+        student_id = data.get("student_id")
+        school = data.get("school")
+
+        student = Student.objects.filter(id=student_id).first()
+
+        if not student:
+            return Response({"error": "Student not found"}, status=404)
+
+        if student.details_done:
+            return Response({"error": "Payment process are already done"}, status=404)
+
+        school_data = School.objects.filter(id=school).first()
+        student_data = Student.objects.filter(id=student_id).first()
+
+        with transaction.atomic():
+            AdmissionFee.objects.create(
+                amount=amount,
+                school=school_data,
+                student=student_data,
+                payment_mode="offline",
+            )
+
+            student.details_done = True
+            student.save()
+
+
+def get_receipt(request, student_id, form_id):
+
+    student = Student.objects.filter(id=student_id).first()
+
+    message = None
+    field_values = None
+    if student.details_done:
+        field_values = StudentFieldValue.objects.select_related("field").filter(
+            student_id=student_id, form_id=form_id
+        )
+
+    else:
+        message = "Some Think error admission process are not done yet"
+    # Example: Payment (if you have model)
+    # payment = Payment.objects.filter(student_id=student_id).last()
+
+    context = {
+        "fields": field_values,
+        # "payment": payment,
+        "message": message,
+    }
+
+    return render(request, "receipt.html", context)
+
 
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 import json
+from itertools import cycle
 
-@method_decorator(csrf_exempt, name='dispatch')
+
+@method_decorator(csrf_exempt, name="dispatch")
 class RazorpayWebhookView(APIView):
     def post(self, request):
         payload = request.body
@@ -750,9 +876,7 @@ class RazorpayWebhookView(APIView):
         secret = settings.RAZOR_PAY_SECRET_KEY
 
         generated_signature = hmac.new(
-            secret.encode(),
-            payload,
-            hashlib.sha256
+            secret.encode(), payload, hashlib.sha256
         ).hexdigest()
 
         if generated_signature == signature:
@@ -773,11 +897,13 @@ class RazorpayWebhookView(APIView):
             return Response({"status": "ok"})
 
         return Response({"status": "invalid"}, status=400)
-    
-# NOT IN USE 
+
+
+# NOT IN USE
 class DivisionSetView(ModelViewSet):
-    queryset =Student.objects.all()
+    queryset = Student.objects.all()
     serializer_class = DivisionSetSerilaizer
+
 
 # Only for Post method  from rest_framework.response import Response
 from rest_framework import status
@@ -787,6 +913,7 @@ import string
 
 from django.core.cache import cache
 import string
+
 
 class SetDivisionView(ModelViewSet):
     queryset = Division.objects.all()
@@ -801,10 +928,9 @@ class SetDivisionView(ModelViewSet):
         try:
             cached_data = cache.get(cache_key)
             if cached_data:
-                return Response({
-                    "message": "Data fetched from cache",
-                    "data": cached_data
-                })
+                return Response(
+                    {"message": "Data fetched from cache", "data": cached_data}
+                )
         except Exception:
             pass  # 🚀 Ignore Redis error
 
@@ -818,12 +944,11 @@ class SetDivisionView(ModelViewSet):
 
         return Response(serializer.data)
 
-
     # ✅ CREATE
     def create(self, request, *args, **kwargs):
-        division_count = request.data.get('division')
-        school_class = request.data.get('SchoolClass')
-        capacity = request.data.get('capacity')
+        division_count = request.data.get("division")
+        school_class = request.data.get("SchoolClass")
+        capacity = request.data.get("capacity")
 
         if not division_count:
             return Response({"error": "division is required"}, status=400)
@@ -838,14 +963,18 @@ class SetDivisionView(ModelViewSet):
             division_count = int(division_count)
             capacity = int(capacity)
         except ValueError:
-            return Response({"error": "division and capacity must be integers"}, status=400)
+            return Response(
+                {"error": "division and capacity must be integers"}, status=400
+            )
 
         if division_count <= 0 or division_count > 26:
             return Response({"error": "division must be between 1 and 26"}, status=400)
 
         existing = Division.objects.filter(SchoolClass_id=school_class).count()
         if existing > 0:
-            return Response({"error": "Divisions already exist for this class"}, status=400)
+            return Response(
+                {"error": "Divisions already exist for this class"}, status=400
+            )
 
         alphabet = list(string.ascii_uppercase[:division_count])
 
@@ -867,11 +996,10 @@ class SetDivisionView(ModelViewSet):
 
         serializer = self.get_serializer(divisions, many=True)
 
-        return Response({
-            "message": "Division created Successfully",
-            "data": serializer.data
-        }, status=status.HTTP_201_CREATED)
-
+        return Response(
+            {"message": "Division created Successfully", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
 
     # ✅ UPDATE (SAFE cache clear)
     def perform_update(self, serializer):
@@ -882,7 +1010,6 @@ class SetDivisionView(ModelViewSet):
         except Exception:
             pass
 
-
     # ✅ DELETE (SAFE cache clear)
     def perform_destroy(self, instance):
         try:
@@ -891,9 +1018,9 @@ class SetDivisionView(ModelViewSet):
             pass
 
         instance.delete()
-    
 
-# This Logic perfom with button after admission and complete and division is set    
+
+# This Logic perfom with button after admission and complete and division is set
 @transaction.atomic
 def assign_student_divisions():
     # Get all classes
@@ -902,7 +1029,7 @@ def assign_student_divisions():
     for school_class in classes:
         # Get divisions for this class
         divisions = list(
-            Division.objects.filter(school_class=school_class).order_by('id')
+            Division.objects.filter(school_class=school_class).order_by("id")
         )
 
         # Skip if no divisions exist
@@ -914,7 +1041,7 @@ def assign_student_divisions():
 
         # Get students of this class
         students = list(
-            Student.objects.filter(school_class=school_class).order_by('created_at')
+            Student.objects.filter(school_class=school_class).order_by("created_at")
         )
 
         if not students:
@@ -929,7 +1056,9 @@ def assign_student_divisions():
             student.division = divisions[index % division_len]
 
         # Bulk update for performance
-        Student.objects.bulk_update(students, ['division'])
+        Student.objects.bulk_update(students, ["division"])
+
+
 # ==================================================================
 
 from django.core.cache import cache
@@ -938,10 +1067,11 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.core.cache import cache
 
+
 class SetSubjectView(ModelViewSet):
     queryset = Subject.objects.all()
     serializer_class = SetSubjectSerializer
-    permission_classes = [IsAuthenticated, IsCLerk]
+    # permission_classes = [IsAuthenticated, IsCLerk]
 
     def get_queryset(self):
         return Subject.objects.filter(school=self.request.user.school)
@@ -962,9 +1092,12 @@ class SetSubjectView(ModelViewSet):
         except Exception:
             pass
 
-        return Response({
-            "message": "Subject created successfully",
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "message": "Subject created successfully",
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     # ✅ LIST
     def list(self, request, *args, **kwargs):
@@ -977,10 +1110,9 @@ class SetSubjectView(ModelViewSet):
         try:
             cached_data = cache.get(cache_key)
             if cached_data:
-                return Response({
-                    "message": "Data fetched from cache",
-                    "data": cached_data
-                })
+                return Response(
+                    {"message": "Data fetched from cache", "data": cached_data}
+                )
         except Exception:
             pass
 
@@ -997,10 +1129,7 @@ class SetSubjectView(ModelViewSet):
         except Exception:
             pass
 
-        return Response({
-            "message": "Data fetched from DB",
-            "data": serializer.data
-        })
+        return Response({"message": "Data fetched from DB", "data": serializer.data})
 
     # ✅ RETRIEVE
     def retrieve(self, request, *args, **kwargs):
@@ -1010,10 +1139,9 @@ class SetSubjectView(ModelViewSet):
         try:
             cached_data = cache.get(cache_key)
             if cached_data:
-                return Response({
-                    "message": "Data fetched from cache",
-                    "data": cached_data
-                })
+                return Response(
+                    {"message": "Data fetched from cache", "data": cached_data}
+                )
         except Exception:
             pass
 
@@ -1025,10 +1153,7 @@ class SetSubjectView(ModelViewSet):
         except Exception:
             pass
 
-        return Response({
-            "message": "Data fetched from DB",
-            "data": serializer.data
-        })
+        return Response({"message": "Data fetched from DB", "data": serializer.data})
 
     # ✅ UPDATE
     def perform_update(self, serializer):
@@ -1047,22 +1172,22 @@ class SetSubjectView(ModelViewSet):
     # ✅ DELETE
     def perform_destroy(self, instance):
         school_id = instance.school.id
-        
 
         try:
             cache.delete(f"subjects_{school_id}_all")
-        
+
             cache.delete(f"subject_{instance.id}")
         except Exception:
             pass
 
         instance.delete()
-    
+
 
 from django.core.cache import cache
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
 from rest_framework import status
+
 
 class SyllabusView(ModelViewSet):
     queryset = Syllabus.objects.all()
@@ -1086,10 +1211,10 @@ class SyllabusView(ModelViewSet):
         cache.delete(f"syllabus_{school_id}_all")
         # cache.delete(f"syllabus_{school_id}_{school_class}")
 
-        return Response({
-            "message": "Syllabus created successfully",
-            "data": serializer.data
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {"message": "Syllabus created successfully", "data": serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
 
     # ✅ LIST (WITH CACHE)
     def list(self, request, *args, **kwargs):
@@ -1101,10 +1226,7 @@ class SyllabusView(ModelViewSet):
         # ✅ Check cache
         cached_data = cache.get(cache_key)
         if cached_data:
-            return Response({
-                "message": "Data fetched from cache",
-                "data": cached_data
-            })
+            return Response({"message": "Data fetched from cache", "data": cached_data})
 
         queryset = self.get_queryset()
 
@@ -1116,10 +1238,7 @@ class SyllabusView(ModelViewSet):
         # ✅ Store cache
         cache.set(cache_key, serializer.data, timeout=60 * 10)
 
-        return Response({
-            "message": "Data fetched from DB",
-            "data": serializer.data
-        })
+        return Response({"message": "Data fetched from DB", "data": serializer.data})
 
     # ✅ RETRIEVE
     def retrieve(self, request, *args, **kwargs):
@@ -1128,20 +1247,19 @@ class SyllabusView(ModelViewSet):
 
         cached_data = cache.get(cache_key)
         if cached_data:
-            return Response({
-                "message": "Data fetched from cache",
-                # "data": cached_data
-            })
+            return Response(
+                {
+                    "message": "Data fetched from cache",
+                    # "data": cached_data
+                }
+            )
 
         instance = self.get_object()
         serializer = self.get_serializer(instance)
 
         cache.set(cache_key, serializer.data, timeout=60 * 10)
 
-        return Response({
-            "message": "Data fetched from DB",
-            "data": serializer.data
-        })
+        return Response({"message": "Data fetched from DB", "data": serializer.data})
 
     # ✅ UPDATE
     def perform_update(self, serializer):
@@ -1170,16 +1288,183 @@ class AssignClassView(ModelViewSet):
     queryset = AssignClass.objects.all()
     serializer_class = AssignClassSerializer
 
+
 # ========= TIME TABLE VIEWs============
+
 
 class Tt_yearView(ModelViewSet):
     queryset = Tt_year.objects.all()
     serializer_class = Tt_yearSerializer
-    
-# class Tt_dayView(ModelViewSet): 
+
+
+class Time_tableView(ModelViewSet):
+    queryset = Tt_year.objects.all()
+    serializer_class = Time_tableSerializer
+
+
+# class Tt_dayView(ModelViewSet):
 #     queryset = Tt_day.objects.all()
+
 #     serializer_class = Tt_daySerializer
-    
-class Tt_day_timeView(ModelViewSet):  
+
+
+class Tt_day_timeView(ModelViewSet):
     queryset = Tt_day_time.objects.all()
-    serializer_class = Tt_day_timeSerializer 
+    serializer_class = Tt_day_timeSerializer
+
+
+@api_view(["POST"])
+def SetSlotView(request):
+    class_div_id = request.data.get("class_div")
+    school = getattr(request.user, "school", None)
+
+    if not class_div_id:
+        return Response(
+            {"error": "class_div is required"}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    tt_days = Tt_day.objects.filter(class_div=class_div_id).select_related(
+        "year", "class_div", "class_div__SchoolClass"
+    )
+
+    # if school:
+    #     tt_days = tt_days.filter(school=school)
+
+    if not tt_days.exists():
+        return Response(
+            {"error": "No timetable day found for the selected filters"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    assignments = list(
+        AssignClass.objects.filter(division=class_div_id)
+        .exclude(teacher__isnull=True)
+        .select_related("teacher", "division")
+    )
+
+    print(class_div_id)
+    print(assignments)
+    # if school:
+    #     assignments = [a for a in assignments if a.school_id == school.id]
+
+    if not assignments:
+        return Response(
+            {"error": "No assigned teachers found for this class division"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    class_teacher_assignment = next(
+        (item for item in assignments if item.is_class_teacher), None
+    )
+    other_assignments = [item for item in assignments if not item.is_class_teacher]
+    random.shuffle(other_assignments)
+
+    teacher_pool = other_assignments[:]
+    if not teacher_pool and class_teacher_assignment:
+        teacher_pool = [class_teacher_assignment]
+
+    if not teacher_pool and not class_teacher_assignment:
+        return Response(
+            {"error": "No teachers available to set timetable"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    created_rows = []
+
+    with transaction.atomic():
+        for tt_day in tt_days:
+            day_time = tt_day.tt_day_time_set.first()
+            slots = list(tt_day.tt_slot_set.all().order_by("id"))
+
+            if not day_time:
+                return Response(
+                    {"error": f"Day time is missing for {tt_day.day}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if not slots:
+                return Response(
+                    {"error": f"Slots are missing for {tt_day.day}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            rotating_teachers = cycle(teacher_pool)
+
+            for index, slot_obj in enumerate(slots):
+                slot_data = slot_obj.slot or {}
+                slot_label = str(slot_data.get("slot") or slot_obj.lecture)
+                start_time = slot_data.get("start") or day_time.start
+                end_time = slot_data.get("end") or day_time.end
+
+                if index == 0 and class_teacher_assignment:
+                    teacher = class_teacher_assignment.teacher
+                else:
+                    teacher = next(rotating_teachers).teacher
+
+                timetable_obj, _ = Time_table.objects.update_or_create(
+                    year=tt_day.year,
+                    day=tt_day.day,
+                    class_div=tt_day.class_div,
+                    slot=slot_label,
+                    defaults={
+                        "school": school or tt_day.school,
+                        "teacher": teacher,
+                        "start": start_time,
+                        "end": end_time,
+                    },
+                )
+                created_rows.append(timetable_obj)
+
+    serializer = SetTimeTableSerializer(created_rows, many=True)
+    return Response(
+        {
+            "message": "Time table set successfully",
+            "data": serializer.data,
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+# for get student for principle with filter     [school filter add remainig]
+class GetStudentView(ModelViewSet):
+    queryset = Student.objects.all()
+    serializer_class = GetStudentSerializer
+    # permission_classes = [IsAuthenticated, Isprincipal]
+
+    def get_queryset(self):
+        # school = self.request.user.school or None
+        queryset = Student.objects.filter(details_done=True)
+
+        school_class = self.request.query_params.get("school_class")
+
+        if school_class:
+            queryset = queryset.filter(school_class=school_class)
+
+        return queryset
+
+
+class GetLocationView(APIView):
+    # permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = AttendanceLocationSerializer(
+            data=request.data, context={"request": request}
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Location created successfully"},
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AttendanceView(ModelViewSet):
+    queryset = Attendance.objects.all()
+    serializer_class = AttendanceSerializer
+    # permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Attendance.objects.filter()
+
+

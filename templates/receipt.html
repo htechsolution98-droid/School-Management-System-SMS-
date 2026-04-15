@@ -1,0 +1,33 @@
+<div class="receipt-box">
+    <h2>Payment Receipt</h2>
+    {% if not message %}
+
+        <hr>
+
+        <h3>Student Details</h3>
+
+        {% for item in fields %}
+            <div class="row">
+                <b>{{ item.field.label }}:</b> {{ item.value }}
+            </div>
+        {% endfor %}
+
+        <hr>
+
+        <h3>Payment Details</h3>
+
+        <div class="row">
+            <b>Amount:</b> ₹{{ payment.amount }}
+        </div>
+
+        <div class="row">
+            <b>Payment Mode:</b> {{ payment.payment_mode }}
+        </div>
+
+        <div class="row">
+            <b>Date:</b> {{ payment.date }}
+        </div>
+    {% else %}
+            <h> {{message}}</h>
+    {% endif %}
+</div>
