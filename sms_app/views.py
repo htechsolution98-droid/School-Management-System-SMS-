@@ -561,16 +561,18 @@ class FormStatus(ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
+        user = request.user
         is_active = request.data.get("is_active")
 
         with transaction.atomic():
             # If setting this form to active
             if is_active is True or is_active == "true":
                 # Make all other forms inactive
-                AdmissionForm.objects.exclude(id=instance.id).update(is_active=False)
+                AdmissionForm.objects.exclude(id=instance.id).filter(school=user.school).update(is_active=False)
 
             # Update current instance
             serializer = self.get_serializer(instance, data=request.data, partial=True)
+            
             serializer.is_valid(raise_exception=True)
             serializer.save()
 
@@ -1559,11 +1561,10 @@ class GetAnnouncementView(ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         now = timezone.now()
-        pass
-        if user.groups.filter(name="student").exists():
-            return Announcement.objects.filter(
-                Q(targets__target_type="all", school=user.school)
-                | Q(targets__target_type="student", targets__target_id=user.student.id, school=user.school)
-            ).distinct().order_by("-created_at")
-
         
+
+        if Announcement.objects.filter(school=user.school, targets__target_type="all", start_date__lte=now, end_date__gte=now).exists():
+            return Announcement.objects.filter(school=user.school, targets__target_type="all", start_date__lte=now, end_date__gte=now).distinct()
+        
+        if Announcement.objects.filter(school=user.school, targets__target_type="student", start_date__lte=now, end_date__gte=now).exists():
+            return Announcement.objects.filter(school=user.school, targets__target_type="student", start_date__lte=now, end_date__gte=now).distinct()
