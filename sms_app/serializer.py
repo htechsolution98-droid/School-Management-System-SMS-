@@ -330,6 +330,7 @@ class AdmissionFormSerializer(serializers.ModelSerializer):
         model = AdmissionForm
         fields = [
             "id",
+            "is_active",
             "fees_enable",
             "fees",
             "title",
