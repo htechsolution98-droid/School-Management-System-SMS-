@@ -96,6 +96,8 @@ router.register(r'leave-request', LeaveRequestView, basename='leave-request')#
 
 router.register(r'get-leave-requests', GetLeaveRequestView, basename='get-leave-requests')# For get leave request for principle with filter [school filter add remainig]
 router.register(r'change-leave-status', ChangeLeaveView, basename='change-leave-status')# For approve leave request for principle METHOD [PUT]
+router.register(r'announcements', AnnouncementView, basename='announcements')# For managing announcements
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -112,7 +114,7 @@ urlpatterns = [
     
      path('api/admission/<str:unique_link>/',Admission),
      path('api/admission/form/link/',ShareFormLink), #to get active form link for admission form fill up
-     path('checkmobile/',CheckMobileAPIView.as_view()),
+     path('api/checkmobile/',CheckMobileAPIView.as_view()),
      
      # To get remaining leave for staff when click on apply leave button for show remaining leave
      path('api/get-remaining-leaves/',GetRemainingLeaveView.as_view()),

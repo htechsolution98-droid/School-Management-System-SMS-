@@ -1482,44 +1482,41 @@ class LeaveTemplateView(ModelViewSet):
     # permission_classes = [IsAuthenticated]
 
     def get_parsers(self):
-        
+
         return super().get_parsers()
 
 
-  
 class LeaveRequestView(ModelViewSet):
     queryset = LeaveRequest.objects.all()
     serializer_class = LeaveRequestSerializer
     permission_classes = [IsAuthenticated]
-    
+
+
 class GetLeaveRequestView(ModelViewSet):
     queryset = LeaveRequest.objects.all()
     serializer_class = GetLeaveRequestSerializer
     permission_classes = [IsAuthenticated]
-    http_method_names = ['get']
-    
- 
+    http_method_names = ["get"]
+
     def get_queryset(self):
-    
+
         queryset = LeaveRequest.objects.filter(school=self.request.user.school)
 
         return queryset
-    
+
 
 class ChangeLeaveView(ModelViewSet):
     queryset = LeavePerDay.objects.all()
     serializer_class = ChangeLeavePerDaySerializer
     permission_classes = [IsAuthenticated, Isprincipal]
-    http_method_names = ['patch']
-    
-    
+    http_method_names = ["patch"]
+
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
 
         if instance.leave.school != request.user.school:
             return Response(
-                {"error": "You are not allowed to modify this record"},
-                status=403
+                {"error": "You are not allowed to modify this record"}, status=403
             )
 
         return super().update(request, *args, **kwargs)
@@ -1534,10 +1531,30 @@ class GetRemainingLeaveView(APIView):
 
         staff = Staff.objects.filter(user=user).first()
         queryset = StaffRemainingLeave.objects.filter(
-            staff=staff,
-            school=user.school,
-            leave_template=leave_template
+            staff=staff, school=user.school, leave_template=leave_template
         )
 
         serializer = StaffRemainingLeaveSerializer(queryset, many=True)
         return Response(serializer.data)
+
+
+class AnnouncementView(ModelViewSet):
+    queryset = Announcement.objects.all()
+    serializer_class = AnnouncementSerializer
+    permission_classes = [IsAuthenticated, Isprincipal]
+
+    def get_queryset(self):
+        user = self.request.user
+        now = timezone.now()
+
+        return (
+            Announcement.objects.filter(school=user.school, publish_at__lte=now)
+            .filter(Q(expires_at__isnull=True) | Q(expires_at__gte=now))
+            .filter(
+                Q(targets__target_type="ALL")
+                | Q(targets__target_type="ROLE", targets__target_id=user.role_id)
+                | Q(targets__target_type="CLASS", targets__target_id=user.class_id)
+                | Q(targets__target_type="USER", targets__target_id=user.id)
+            )
+            .distinct()
+        )

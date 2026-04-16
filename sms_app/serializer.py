@@ -1610,13 +1610,34 @@ class AnnouncementTargetSerializer(serializers.ModelSerializer):
     class Meta:
         model = AnnouncementTarget
         fields = "__all__"
-        read_only_fields = ["school"]
+        read_only_fields = ["school","announcement"]
 
 class AnnouncementSerializer(serializers.ModelSerializer):
     targets = AnnouncementTargetSerializer(many=True, required=False)
     class Meta:
         model = Announcement
-        fields = ["id", "title", "description", "publish_at", "expires_at", "created_at", "targets", "school", "created_by"]
-        read_only_fields = ["school", "created_by"]
+        fields = ["id", "title", "description", "publish_at", "expires_at", "targets", "school"]
+        read_only_fields = ["school"]
         
+        
+    def create(self, validated_data):
+        targets_data = validated_data.pop("targets", [])
+        
+        print(targets_data)
+        
+        announcement = Announcement.objects.create(**validated_data)
+        
+        for target_data in targets_data:
+            AnnouncementTarget.objects.create(announcement=announcement, **target_data)
+        
+        return announcement
+    
+
+
+class GetAnnouncementSerializer(serializers.ModelSerializer):
+    targets = AnnouncementTargetSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Announcement
+        fields = ["id", "title", "description", "publish_at", "expires_at", "targets"]
         

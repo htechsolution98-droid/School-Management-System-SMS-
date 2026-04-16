@@ -618,6 +618,7 @@ class StaffRemainingLeave(models.Model):
 
 
 class Announcement(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
     title = models.CharField(max_length=255)
     description = models.TextField()
 
@@ -627,11 +628,12 @@ class Announcement(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 class AnnouncementTarget(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)  
     TARGET_TYPE = [
         ('ALL', 'All'),
         ('ROLE', 'Role'),
         ('CLASS', 'Class'),
-        ('USER', 'Specific User'),
+        ('SPECIFIC', 'Specific User'),
     ]
 
     announcement = models.ForeignKey(
