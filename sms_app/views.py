@@ -846,7 +846,8 @@ class OffilinePaymentView(APIView):
 
             student.details_done = True
             student.save()
-
+            
+        return Response({"status": "success"})
 
 def get_receipt(request, student_id, form_id):
 
