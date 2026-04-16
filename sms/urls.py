@@ -91,7 +91,11 @@ router.register(r'tt_daytime', Tt_day_timeView, basename='tt_daytime')# For CLer
 
 router.register(r'get-student',GetStudentView,basename='get-student')# for get student for principle with filter [school filter add remainig]
 router.register(r'attendance', AttendanceView, basename='attendance')# For attendance tracking METHOD [GET,POST,PUT,DELETE]
+router.register(r'leave-template', LeaveTemplateView, basename='leave-template')# For leave template tracking METHOD [GET,POST,PUT,DELETE]
+router.register(r'leave-request', LeaveRequestView, basename='leave-request')# 
 
+router.register(r'get-leave-requests', GetLeaveRequestView, basename='get-leave-requests')# For get leave request for principle with filter [school filter add remainig]
+router.register(r'change-leave-status', ChangeLeaveView, basename='change-leave-status')# For approve leave request for principle METHOD [PUT]
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -107,8 +111,11 @@ urlpatterns = [
     path('api/fields/<str:unique_link>/', FormFieldViewSet.as_view()),
     
      path('admission/<str:unique_link>/',Admission),
-     path('admission/form/link/',ShareFormLink),
+     path('admission/form/link/',ShareFormLink), #to get active form link for admission form fill up
      path('checkmobile/',CheckMobileAPIView.as_view()),
+     
+     # To get remaining leave for staff when click on apply leave button for show remaining leave
+     path('api/get-remaining-leaves/',GetRemainingLeaveView.as_view()),
      
     # path('form_page/', TemplateView.as_view(template_name = 'add_form.html')),
     # path('fill_form/',TemplateView.as_view(template_name='form_fill.html')),

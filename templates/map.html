@@ -97,6 +97,21 @@
         </div>
 
         <div class="form-group">
+          <label for="start_time">Start Time</label>
+          <input type="time" id="start_time" />
+        </div>
+
+        <div class="form-group">
+          <label for="end_time">End Time</label>
+          <input type="time" id="end_time" />
+        </div>
+
+        <div class="form-group">
+          <label for="half_day_time">Half Day Time</label>
+          <input type="time" id="half_day_time" />
+        </div>
+
+        <div class="form-group">
           <label for="latitude">Latitude</label>
           <input type="text" id="latitude" readonly />
         </div>
@@ -180,37 +195,45 @@
       });
 
       function saveLocation() {
-        const school = document.getElementById("school").value;
-        const latitude = document.getElementById("latitude").value;
-        const longitude = document.getElementById("longitude").value;
-        const radius = document.getElementById("radius").value;
+  const school = document.getElementById("school").value;
+  const latitude = document.getElementById("latitude").value;
+  const longitude = document.getElementById("longitude").value;
+  const radius = document.getElementById("radius").value;
 
-        if (!school || !latitude || !longitude || !radius) {
-          alert("Please fill all fields");
-          return;
-        }
+  const start_time = document.getElementById("start_time").value;
+  const end_time = document.getElementById("end_time").value;
+  const half_day_time = document.getElementById("half_day_time").value;
 
-        fetch("http://127.0.0.1:8000/api/get-location/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            latitude: latitude,
-            longitude: longitude,
-            radius: radius,
-          }),
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            alert("Attendance location saved successfully");
-            console.log(data);
-          })
-          .catch((err) => {
-            console.error(err);
-            alert("Error saving location");
-          });
-      }
+  if (!school || !latitude || !longitude || !radius || !start_time || !end_time || !half_day_time) {
+    alert("Please fill all fields");
+    return;
+  }
+
+  fetch("http://127.0.0.1:8000/api/get-location/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      latitude: latitude,
+      longitude: longitude,
+      radius: radius,
+      start_time: start_time,
+      end_time: end_time,
+      half_day_time: half_day_time,
+      school: school, // ✅ use dynamic value
+    }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      alert("Attendance location saved successfully");
+      console.log(data);
+    })
+    .catch((err) => {
+      console.error(err);
+      alert("Error saving location");
+    });
+}
     </script>
   </body>
 </html>

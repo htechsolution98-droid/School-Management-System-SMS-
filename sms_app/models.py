@@ -500,27 +500,116 @@ class Time_table(models.Model):
     def __str__(self):
         return f"{self.year} - {self.day} - {self.class_div} - {self.slot}"
 
-
+class AttendanceTimeRule(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    half_day_time = models.TimeField(null=True, blank=True)
+    
+    
 class AttendanceLocation(models.Model):
-    school = models.ForeignKey(
-        School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
-    )
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6)
     longitude = models.DecimalField(max_digits=9, decimal_places=6)
     radius = models.DecimalField(max_digits=10, decimal_places=2)
 
     def __str__(self):
-        return f"Attendance Location for {self.school.name}"
+        return f"Attendance Location for {self.school}"
 
 
 class Attendance(models.Model):
 
-    school = models.ForeignKey(School, on_delete=models.CASCADE,null=True, blank=True, db_index=True)
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
+    )
     staff = models.ForeignKey(Staff, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=255, null=True, blank=True)
     category = models.CharField(max_length=20, null=True, blank=True)
-    date = models.DateField()
+    date_time = models.DateTimeField(null=True, blank=True)
     is_present = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.name} - {self.date}"
+
+
+class LeaveTemplate(models.Model):
+    TIMELINE_CHOICES = [
+        ("MONTHLY", "Monthly"),
+        ("QUARTERLY", "Quarterly"),
+        ("SEMI_ANNUAL", "Semi-Annual"),
+        ("ANNUAL", "Annual"),
+    ]
+
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
+    )
+    time_line = models.CharField(
+        max_length=20, choices=TIMELINE_CHOICES, null=True, blank=True
+    )
+    leave_type = models.CharField(max_length=100, null=True, blank=True)
+    leave_num = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.leave_type} - {self.time_line}"
+
+
+class LeaveRequest(models.Model):
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
+    )
+    staff = models.ForeignKey(Staff, on_delete=models.CASCADE, null=True, blank=True)
+    leave_type = models.CharField(max_length=100, null=True, blank=True)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+
+    total_days = models.IntegerField(null=True, blank=True)
+    reason = models.TextField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_at = models.DateTimeField(
+        auto_now=True, null=True, blank=True
+    )  # at a time no nedd this
+
+    def __str__(self):
+        return f"{self.staff.name} - {self.leave_type} - {self.status}"
+
+
+class LeavePerDay(models.Model):
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
+    )
+
+    leave = models.ForeignKey(
+        LeaveRequest, on_delete=models.CASCADE, null=True, blank=True, related_name="leave_days"
+    )
+    date = models.DateField(null=True, blank=True)
+
+    STATUS_CHOICES = [
+        ("PENDING", "Pending"),
+        ("APPROVED", "Approved"),
+        ("REJECTED", "Rejected"),
+        ("CANCELLED", "Cancelled"),
+    ]
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING", null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.date} - {self.total_leaves} leaves"
+
+
+class StaffRemainingLeave(models.Model):
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
+    )
+    staff = models.ForeignKey(Staff, on_delete=models.CASCADE, null=True, blank=True)
+    leave_template = models.ForeignKey(
+        LeaveTemplate, on_delete=models.CASCADE, null=True, blank=True
+    )
+    total_levaes = models.IntegerField(null=True, blank=True)
+    remaining_leaves = models.IntegerField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.staff} - {self.leave_template}"
+    

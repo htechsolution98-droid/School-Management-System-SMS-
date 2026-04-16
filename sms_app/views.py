@@ -1,3 +1,5 @@
+from urllib import response
+
 from django.shortcuts import render
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.views import APIView
@@ -554,7 +556,7 @@ class FormFieldViewSet(RetrieveAPIView):
 class FormStatus(ModelViewSet):
     queryset = AdmissionForm.objects.all()
     serializer_class = ChangeFormStatus
-    serializer_class = [IsAuthenticated, Isprincipal]
+    permission_classes = [IsAuthenticated, Isprincipal]
     http_method_names = ["patch"]
 
     def partial_update(self, request, *args, **kwargs):
@@ -1462,9 +1464,80 @@ class GetLocationView(APIView):
 class AttendanceView(ModelViewSet):
     queryset = Attendance.objects.all()
     serializer_class = AttendanceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+
+        return Response(
+            {"message": "Attendance Added successfully", "data": response.data},
+            status=status.HTTP_201_CREATED,
+        )
+        #     return Attendance.objects.filter()
+
+
+class LeaveTemplateView(ModelViewSet):
+    queryset = LeaveTemplate.objects.all()
+    serializer_class = LeaveTemplateSerializer
     # permission_classes = [IsAuthenticated]
 
+    def get_parsers(self):
+        
+        return super().get_parsers()
+
+
+  
+class LeaveRequestView(ModelViewSet):
+    queryset = LeaveRequest.objects.all()
+    serializer_class = LeaveRequestSerializer
+    permission_classes = [IsAuthenticated]
+    
+class GetLeaveRequestView(ModelViewSet):
+    queryset = LeaveRequest.objects.all()
+    serializer_class = GetLeaveRequestSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get']
+    
+ 
     def get_queryset(self):
-        return Attendance.objects.filter()
+    
+        queryset = LeaveRequest.objects.filter(school=self.request.user.school)
+
+        return queryset
+    
+
+class ChangeLeaveView(ModelViewSet):
+    queryset = LeavePerDay.objects.all()
+    serializer_class = ChangeLeavePerDaySerializer
+    permission_classes = [IsAuthenticated, Isprincipal]
+    http_method_names = ['patch']
+    
+    
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+
+        if instance.leave.school != request.user.school:
+            return Response(
+                {"error": "You are not allowed to modify this record"},
+                status=403
+            )
+
+        return super().update(request, *args, **kwargs)
 
 
+class GetRemainingLeaveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        leave_template = request.data.get("leave_template")
+        user = request.user
+
+        staff = Staff.objects.filter(user=user).first()
+        queryset = StaffRemainingLeave.objects.filter(
+            staff=staff,
+            school=user.school,
+            leave_template=leave_template
+        )
+
+        serializer = StaffRemainingLeaveSerializer(queryset, many=True)
+        return Response(serializer.data)
