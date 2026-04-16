@@ -525,7 +525,7 @@ class AdmissionFormViewSet(ModelViewSet):
     # access form via UUID
 
     def get_queryset(self):
-        return AdmissionForm.objects.filter(is_active=True)
+        return AdmissionForm.objects.filter(school=self.request.user.school)
 
     def perform_create(self, serializer):
         serializer.save(school=self.request.user.school)
@@ -757,7 +757,13 @@ class VerifyPaymentView(APIView):
         signature = data.get("razorpay_signature")
         form_id = data.get("form_id")
         student_id = data.get("student_id")
-
+        
+        student_id = int(student_id)  # Convert to integer if it's a string
+        student = Student.objects.filter(id =student_id).first()
+        
+        if student.details_done:
+            return Response({"error": "Payment process are already done"}, status=400)
+    
         print("RAZORPAY_ORDER_ID", order_id)
         print("RAZORPAY_PAYMENT_ID", payment_id)
         print("RAZORPAY_SIGNATURE", signature)
@@ -1543,18 +1549,21 @@ class AnnouncementView(ModelViewSet):
     serializer_class = AnnouncementSerializer
     permission_classes = [IsAuthenticated, Isprincipal]
 
+
+
+class GetAnnouncementView(ModelViewSet):
+    queryset = Announcement.objects.all()
+    serializer_class = GetAnnouncementSerializer
+    permission_classes = [IsAuthenticated]
+    
     def get_queryset(self):
         user = self.request.user
         now = timezone.now()
+        pass
+        if user.groups.filter(name="student").exists():
+            return Announcement.objects.filter(
+                Q(targets__target_type="all", school=user.school)
+                | Q(targets__target_type="student", targets__target_id=user.student.id, school=user.school)
+            ).distinct().order_by("-created_at")
 
-        return (
-            Announcement.objects.filter(school=user.school, publish_at__lte=now)
-            .filter(Q(expires_at__isnull=True) | Q(expires_at__gte=now))
-            .filter(
-                Q(targets__target_type="ALL")
-                | Q(targets__target_type="ROLE", targets__target_id=user.role_id)
-                | Q(targets__target_type="CLASS", targets__target_id=user.class_id)
-                | Q(targets__target_type="USER", targets__target_id=user.id)
-            )
-            .distinct()
-        )
+        

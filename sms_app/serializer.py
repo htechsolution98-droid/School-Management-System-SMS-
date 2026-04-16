@@ -1622,13 +1622,14 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         
     def create(self, validated_data):
         targets_data = validated_data.pop("targets", [])
+        user = self.context["request"].user 
         
         print(targets_data)
         
-        announcement = Announcement.objects.create(**validated_data)
+        announcement = Announcement.objects.create(school=user.school, **validated_data)
         
         for target_data in targets_data:
-            AnnouncementTarget.objects.create(announcement=announcement, **target_data)
+            AnnouncementTarget.objects.create( school=user.school, announcement=announcement, **target_data)
         
         return announcement
     

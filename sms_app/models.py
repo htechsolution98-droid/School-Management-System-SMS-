@@ -141,7 +141,7 @@ class AdmissionForm(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
 
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     fees_enable = models.BooleanField(default=False)
 
     FEE_TYPE_CHOICES = (

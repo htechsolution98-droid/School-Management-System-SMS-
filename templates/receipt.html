@@ -1,33 +1,1012 @@
-<div class="receipt-box">
-    <h2>Payment Receipt</h2>
-    {% if not message %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admission Form | Edunet</title>
 
-        <hr>
+    <link rel="stylesheet" href="{% static 'sms_app/css/style.css' %}">
 
-        <h3>Student Details</h3>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Razorpay SDK -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
 
-        {% for item in fields %}
-            <div class="row">
-                <b>{{ item.field.label }}:</b> {{ item.value }}
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="screen flex-center">
+        <div class="loader-container">
+            <div class="spinner"></div>
+            <p>Preparing admission form...</p>
+        </div>
+    </div>
+
+    <!-- Main Form Container -->
+    <div id="form-container" class="container hidden">
+        <div class="card shadow-xl">
+            <!-- Progress Bar -->
+            <div class="progress-container">
+                <div id="progress-bar" class="progress-bar"></div>
             </div>
-        {% endfor %}
 
-        <hr>
+            <div class="card-header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <span id="step-badge" class="badge">Step 1 of 3</span>
+                        <h1 id="form-title" class="title">Admission Form</h1>
+                        <p id="form-desc" class="description">Please provide your information</p>
+                    </div>
+                </div>
+            </div>
 
-        <h3>Payment Details</h3>
+            <div class="card-content">
 
-        <div class="row">
-            <b>Amount:</b> ₹{{ payment.amount }}
+                <!-- Step 1: Personal Info -->
+                <div id="step-1" class="step-view">
+                    <!-- Mobile Verify Banner -->
+                    <div class="verify-banner">
+                        <div class="verify-banner-text">
+                            <i data-lucide="smartphone" class="verify-icon"></i>
+                            <span>Already started an application? Verify your mobile to continue where you left off.</span>
+                        </div>
+                        <button class="btn btn-verify" onclick="openVerifyModal()">
+                            <i data-lucide="shield-check"></i> Verify Mobile
+                        </button>
+                    </div>
+
+                    <div id="dynamic-sections" class="sections-grid">
+                        <!-- Sections injected here -->
+                    </div>
+                </div>
+
+                <!-- Step 2: Documents -->
+                <div id="step-2" class="step-view hidden">
+                    <div class="section-title-container">
+                        <div class="accent-bar bar-indigo"></div>
+                        <h3>Document & ID Requirements</h3>
+                    </div>
+                    <div id="dynamic-documents" class="documents-list">
+                        <!-- Docs injected here -->
+                    </div>
+                </div>
+
+                <!-- Step 3: Payment -->
+                <div id="step-3" class="step-view hidden">
+                    <div class="section-title-container">
+                        <div class="accent-bar bar-emerald"></div>
+                        <h3>Payment</h3>
+                    </div>
+                    <div id="payment-content">
+                        <!-- Payment UI injected here -->
+                    </div>
+                </div>
+
+                <!-- Success Screen -->
+                <div id="step-success" class="step-view hidden flex-center py-12">
+                    <div class="success-animation">
+                        <div class="success-circle">
+                            <i data-lucide="check" class="icon-success"></i>
+                        </div>
+                    </div>
+                    <h2 class="success-title">Application Submitted!</h2>
+                    <p id="success-message" class="success-message">Your application has been received.</p>
+                    <button class="btn btn-success btn-lg mt-8" onclick="location.reload()">Done</button>
+                </div>
+
+                <!-- Receipt Screen -->
+                <div id="step-receipt" class="step-view hidden">
+                    <div id="receipt-content"></div>
+                </div>
+
+            </div>
+
+            <div id="form-footer" class="card-footer">
+                <button id="prev-btn" class="btn btn-outline" onclick="prevStep()" disabled>
+                    <i data-lucide="chevron-left"></i> Previous
+                </button>
+                <div class="footer-right">
+                    <button id="next-btn" class="btn btn-primary" onclick="nextStep()">
+                        Continue <i data-lucide="chevron-right"></i>
+                    </button>
+                    <button id="pay-btn" class="btn btn-primary btn-submit hidden" onclick="handlePayment()">
+                        Proceed to Pay <i data-lucide="credit-card"></i>
+                    </button>
+                </div>
+            </div>
         </div>
+    </div>
 
-        <div class="row">
-            <b>Payment Mode:</b> {{ payment.payment_mode }}
+    <!-- Mobile Verify Modal -->
+    <div id="verify-modal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Verify Mobile Number</h3>
+                <button class="modal-close" onclick="closeVerifyModal()">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-desc">Enter your mobile number to check if you have an existing application.</p>
+                <div class="field-group">
+                    <label>Mobile Number <span class="required">*</span></label>
+                    <input type="tel" id="verify-mobile-input" placeholder="Enter 10-digit mobile number" maxlength="10">
+                </div>
+                <div id="verify-result" class="hidden"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeVerifyModal()">Cancel</button>
+                <button id="verify-btn" class="btn btn-primary" onclick="verifyMobile()">
+                    <i data-lucide="search"></i> Check
+                </button>
+            </div>
         </div>
+    </div>
 
-        <div class="row">
-            <b>Date:</b> {{ payment.date }}
+    <!-- Error Screen -->
+    <div id="error-screen" class="screen flex-center hidden">
+        <div class="error-container">
+            <i data-lucide="alert-circle" class="icon-error"></i>
+            <h2>Oops! Something went wrong</h2>
+            <p id="error-message">Could not load the admission form.</p>
+            <button class="btn btn-outline mt-4" onclick="location.reload()">Try Again</button>
         </div>
-    {% else %}
-            <h> {{message}}</h>
-    {% endif %}
-</div>
+    </div>
+
+<script>
+
+    // ─── Configuration ─────────────────────────────────────────────────────────
+    const API_BASE = "https://school-management-system-sms-y2jr.onrender.com/api";
+    const unique_link = "{{unique_link}}";
+
+    const ENDPOINTS = {
+        FIELDS:          `/fields/${unique_link}/`,
+        CLASSES:         "/getclass/",
+        SUBMISSIONS:     "/submissions/",
+        DOC_SUBMISSION:  "/documentsubmission/",
+        CHECK_MOBILE:    "/checkmobile/",
+        RAZOR_ORDER:     "/razor/order/",
+        VERIFY_PAYMENT:  "/payment/verify/",
+        OFFLINE_PAYMENT: "/offline/payment/",
+    };
+
+    // ─── State ──────────────────────────────────────────────────────────────────
+    let state = {
+        currentStep: 1,
+        formConfig: null,
+        classes: [],
+        formData: {},            // field_id -> value
+        docFiles: {},            // doc_id -> File
+        loading: true,
+        error: null,
+        studentId: null,         // returned after step 1 submission
+        selectedPaymentMethod: null, // 'online' | 'cash'
+    };
+
+    // ─── UI Selectors ───────────────────────────────────────────────────────────
+    const screens = {
+        loading: document.getElementById('loading-screen'),
+        form:    document.getElementById('form-container'),
+        error:   document.getElementById('error-screen')
+    };
+
+    const views = {
+        step1:   document.getElementById('step-1'),
+        step2:   document.getElementById('step-2'),
+        step3:   document.getElementById('step-3'),
+        success: document.getElementById('step-success'),
+        receipt: document.getElementById('step-receipt'),
+    };
+
+    const controls = {
+        prevBtn:     document.getElementById('prev-btn'),
+        nextBtn:     document.getElementById('next-btn'),
+        payBtn:      document.getElementById('pay-btn'),
+        progressBar: document.getElementById('progress-bar'),
+        stepBadge:   document.getElementById('step-badge')
+    };
+
+    // ─── Init ───────────────────────────────────────────────────────────────────
+    async function init() {
+        try {
+            const [fieldsResponse, classesResponse] = await Promise.all([
+                fetch(`${API_BASE}${ENDPOINTS.FIELDS}`),
+                fetch(`${API_BASE}${ENDPOINTS.CLASSES}`)
+            ]);
+
+            if (!fieldsResponse.ok) throw new Error("Failed to load form structure.");
+
+            const fieldsData  = await fieldsResponse.json();
+            const classesData = await classesResponse.json();
+
+            // Resolve form config (array or single object)
+            if (Array.isArray(fieldsData)) {
+                if (fieldsData.length === 0) throw new Error("No active admission forms found.");
+                state.formConfig = fieldsData.sort((a, b) => b.id - a.id)[0];
+            } else {
+                state.formConfig = fieldsData;
+            }
+
+            // Deduplicate classes
+            const rawClasses = Array.isArray(classesData) ? classesData : (classesData.results || []);
+            state.classes = Array.from(
+                new Map(rawClasses.map(item => [item.school_class, item])).values()
+            );
+
+            renderFormInfo();
+            renderStep1();
+            hideLoading();
+            lucide.createIcons();
+        } catch (err) {
+            console.error(err);
+            showError(err.message);
+        }
+    }
+
+    // ─── Rendering ──────────────────────────────────────────────────────────────
+    function renderFormInfo() {
+        document.getElementById('form-title').textContent = state.formConfig.title;
+        document.getElementById('form-desc').textContent  = state.formConfig.description;
+    }
+
+    function renderStep1() {
+        const container = document.getElementById('dynamic-sections');
+        container.innerHTML = '';
+
+        const sortedSections = [...state.formConfig.sections].sort((a, b) => a.order - b.order);
+
+        sortedSections.forEach(section => {
+            const sectionEl = document.createElement('div');
+            sectionEl.className = 'section-group';
+
+            sectionEl.innerHTML = `
+                <div class="section-title-container">
+                    <div class="accent-bar bar-indigo"></div>
+                    <h3>${section.title}</h3>
+                </div>`;
+
+            const fieldsGrid = document.createElement('div');
+            fieldsGrid.className = 'fields-grid';
+
+            const sortedFields = [...section.fields].sort((a, b) => a.order - b.order);
+
+            sortedFields.forEach(field => {
+                const fieldGroup = document.createElement('div');
+                fieldGroup.className = 'field-group';
+
+                const label = `<label>${field.label} ${field.is_required ? '<span class="required">*</span>' : ''}</label>`;
+                let input = '';
+
+                const val = state.formData[field.id] !== undefined ? state.formData[field.id] : '';
+
+                if (field.field_type === 'textarea') {
+                    input = `<textarea id="field-${field.id}" placeholder="Enter details..." oninput="updateData('${field.id}', this.value)">${val}</textarea>`;
+                } else if (field.field_type === 'select') {
+                    input = `<select id="field-${field.id}" onchange="updateData('${field.id}', this.value)">
+                        <option value="">Select option</option>
+                        ${renderOptions(field, val)}
+                    </select>`;
+                } else {
+                    input = `<input type="${field.field_type}" id="field-${field.id}" value="${val}" oninput="updateData('${field.id}', this.value)" placeholder="${field.label}">`;
+                }
+
+                fieldGroup.innerHTML = `${label}${input}`;
+                fieldsGrid.appendChild(fieldGroup);
+            });
+
+            sectionEl.appendChild(fieldsGrid);
+            container.appendChild(sectionEl);
+        });
+    }
+
+    function renderOptions(field, selectedVal) {
+        if (field.label.toLowerCase().includes("class") && state.classes.length > 0) {
+            return state.classes.map(cls =>
+                `<option value="${cls.school_class}" ${String(selectedVal) === String(cls.school_class) ? 'selected' : ''}>${cls.school_class}</option>`
+            ).join('');
+        }
+        return (field.options || []).map(opt =>
+            `<option value="${opt.value}" ${String(selectedVal) === String(opt.value) ? 'selected' : ''}>${opt.label}</option>`
+        ).join('');
+    }
+
+    function renderStep2() {
+        const container = document.getElementById('dynamic-documents');
+        container.innerHTML = '';
+
+        state.formConfig.label.forEach(doc => {
+            const isTextInput = doc.label.toLowerCase().includes("number") || doc.label.toLowerCase().includes("id");
+            const docEl = document.createElement('div');
+            docEl.className = 'doc-card';
+
+            const displayValue = isTextInput
+                ? (state.formData[`doc_${doc.id}`] || '')
+                : (state.docFiles[doc.id] ? state.docFiles[doc.id].name : 'PDF or JPG accepted');
+
+            const inputHtml = isTextInput
+                ? `<input type="text" class="doc-input" placeholder="Enter ID" value="${displayValue}" oninput="updateData('doc_${doc.id}', this.value)">`
+                : `
+                    <input type="file" id="file-${doc.id}" class="hidden" accept=".pdf,.jpg,.jpeg,.png" onchange="handleFileUpload(${doc.id}, this)">
+                    <button class="btn btn-outline" onclick="document.getElementById('file-${doc.id}').click()">
+                        <i data-lucide="upload"></i> ${state.docFiles[doc.id] ? 'Change' : 'Upload'}
+                    </button>
+                `;
+
+            docEl.innerHTML = `
+                <div class="doc-info">
+                    <div class="doc-icon"><i data-lucide="file-text"></i></div>
+                    <div class="doc-text">
+                        <p class="doc-name">${doc.label}</p>
+                        <p class="doc-sub" id="sub-${doc.id}">${isTextInput ? 'Enter ID number' : displayValue}</p>
+                    </div>
+                </div>
+                <div class="doc-actions">
+                    ${inputHtml}
+                </div>
+            `;
+
+            container.appendChild(docEl);
+        });
+        lucide.createIcons();
+    }
+
+    function renderStep3() {
+        const container = document.getElementById('payment-content');
+        container.innerHTML = '';
+
+        if (state.formConfig.fees_enable) {
+            container.innerHTML = `
+                <div class="payment-amount-card">
+                    <div class="payment-amount-info">
+                        <p class="payment-label">Application Fee</p>
+                        <p class="payment-amount">₹${state.formConfig.fees}</p>
+                    </div>
+                    <div class="payment-icon"><i data-lucide="receipt"></i></div>
+                </div>
+                <p class="payment-method-heading">Select Payment Method</p>
+                <div class="payment-methods">
+                    <div class="payment-option" id="method-online" onclick="selectPaymentMethod('online')">
+                        <div class="payment-option-icon online">
+                            <i data-lucide="credit-card"></i>
+                        </div>
+                        <div class="payment-option-text">
+                            <p class="payment-option-title">Online Payment</p>
+                            <p class="payment-option-sub">Pay securely via Razorpay (UPI, Card, Net Banking)</p>
+                        </div>
+                        <div class="payment-option-check hidden" id="check-online">
+                            <i data-lucide="check-circle-2"></i>
+                        </div>
+                    </div>
+                    <div class="payment-option" id="method-cash" onclick="selectPaymentMethod('cash')">
+                        <div class="payment-option-icon cash">
+                            <i data-lucide="banknote"></i>
+                        </div>
+                        <div class="payment-option-text">
+                            <p class="payment-option-title">Cash Payment</p>
+                            <p class="payment-option-sub">Pay at the school office in person</p>
+                        </div>
+                        <div class="payment-option-check hidden" id="check-cash">
+                            <i data-lucide="check-circle-2"></i>
+                        </div>
+                    </div>
+                </div>
+                <div id="payment-error" class="payment-error hidden"></div>
+            `;
+        } else {
+            // No fees — just show a summary and allow final submit
+            container.innerHTML = `
+                <div class="no-fee-card">
+                    <i data-lucide="shield-check" class="no-fee-icon"></i>
+                    <p class="no-fee-title">No Application Fee</p>
+                    <p class="no-fee-sub">This form has no payment requirement. Click "Submit" to complete your application.</p>
+                </div>
+            `;
+            // Swap pay button for submit
+            controls.payBtn.textContent = 'Submit Application';
+            controls.payBtn.onclick = submitNoFee;
+        }
+
+        lucide.createIcons();
+    }
+
+    function renderReceiptPage(mobile) {
+        document.getElementById('form-footer').classList.add('hidden');
+        document.querySelector('.progress-container').classList.add('hidden');
+
+        const container = document.getElementById('receipt-content');
+        container.innerHTML = `
+            <div class="receipt-container">
+                <div class="receipt-icon-wrap">
+                    <div class="receipt-icon"><i data-lucide="file-badge-2"></i></div>
+                </div>
+                <h2 class="receipt-title">Application Receipt</h2>
+                <p class="receipt-sub">Your application for mobile <strong>${mobile}</strong> was already submitted and payment is complete.</p>
+                <div class="receipt-info">
+                    <p>You can download your receipt below.</p>
+                </div>
+                <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;margin-top:2rem;">
+                    <button class="btn btn-primary btn-lg" onclick="downloadReceipt('${mobile}')">
+                        <i data-lucide="download"></i> Download Receipt
+                    </button>
+                    <button class="btn btn-outline btn-lg" onclick="location.reload()">
+                        <i data-lucide="rotate-ccw"></i> Back to Form
+                    </button>
+                </div>
+            </div>
+        `;
+        lucide.createIcons();
+    }
+
+    // ─── State Handlers ─────────────────────────────────────────────────────────
+    function updateData(key, value) {
+        state.formData[key] = value;
+    }
+
+    function handleFileUpload(id, input) {
+        const file = input.files[0];
+        if (file) {
+            state.docFiles[id] = file;
+            const sub = document.getElementById(`sub-${id}`);
+            if (sub) sub.textContent = file.name;
+        }
+    }
+
+    function selectPaymentMethod(method) {
+        state.selectedPaymentMethod = method;
+
+        // Visual selection
+        document.querySelectorAll('.payment-option').forEach(el => el.classList.remove('selected'));
+        document.querySelectorAll('.payment-option-check').forEach(el => el.classList.add('hidden'));
+
+        document.getElementById(`method-${method}`).classList.add('selected');
+        document.getElementById(`check-${method}`).classList.remove('hidden');
+
+        hidePaymentError();
+    }
+
+    // ─── Navigation ─────────────────────────────────────────────────────────────
+    async function nextStep() {
+        if (!validateCurrentStep()) return;
+
+        if (state.currentStep === 1) {
+            await submitStep1();
+        } else if (state.currentStep === 2) {
+            await submitStep2();
+        }
+    }
+
+    function prevStep() {
+        if (state.currentStep > 1) {
+            state.currentStep--;
+            updateUI();
+        }
+    }
+
+    // ─── Step 1 Submission ───────────────────────────────────────────────────────
+    async function submitStep1() {
+        setLoading(controls.nextBtn, true);
+        try {
+            const fieldValues = [];
+            state.formConfig.sections.forEach(section => {
+                section.fields.forEach(field => {
+                    fieldValues.push({
+                        field: field.id,
+                        value: state.formData[field.id] !== undefined ? state.formData[field.id] : null
+                    });
+                });
+            });
+
+            // Resolve school_class ID from the chosen class label
+            const selectedClassName = getSelectedClassName();
+            const classObj = state.classes.find(c => String(c.school_class) === String(selectedClassName));
+            const schoolClassId = classObj ? classObj.id : null;
+
+            const payload = {
+                form:         state.formConfig.id,
+                school_class: schoolClassId,
+                school:       state.formConfig.school,
+                mobile:       getMobileFromFormData(),
+                field_values: fieldValues
+            };
+
+            const res = await fetch(`${API_BASE}${ENDPOINTS.SUBMISSIONS}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                // Handle "already done" error
+                if (data.error && data.error.toLowerCase().includes("already done")) {
+                    showPaymentAlreadyDoneError(data.error);
+                } else {
+                    showStepError('step-1-error', data.detail || data.error || JSON.stringify(data));
+                }
+                return;
+            }
+
+            state.studentId = data.id || data.student_id || data.student;
+            state.currentStep = 2;
+            renderStep2();
+            updateUI();
+
+        } catch (err) {
+            console.error(err);
+            showStepError('step-1-error', 'Network error. Please try again.');
+        } finally {
+            setLoading(controls.nextBtn, false);
+        }
+    }
+
+    // ─── Step 2 Submission ───────────────────────────────────────────────────────
+    async function submitStep2() {
+        setLoading(controls.nextBtn, true);
+        try {
+            const formData = new FormData();
+            formData.append("form_id", state.formConfig.id);
+            formData.append("school",  state.formConfig.school);
+            formData.append("student", state.studentId);
+
+            let index = 0;
+            state.formConfig.label.forEach(doc => {
+                const isTextInput = doc.label.toLowerCase().includes("number") || doc.label.toLowerCase().includes("id");
+                if (isTextInput) {
+                    const val = state.formData[`doc_${doc.id}`] || '';
+                    formData.append(`documents[${index}][label]`,    doc.label);
+                    formData.append(`documents[${index}][document]`, val);
+                } else if (state.docFiles[doc.id]) {
+                    formData.append(`documents[${index}][label]`,    doc.label);
+                    formData.append(`documents[${index}][document]`, state.docFiles[doc.id]);
+                }
+                index++;
+            });
+
+            const res = await fetch(`${API_BASE}${ENDPOINTS.DOC_SUBMISSION}`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                if (data.error && data.error.toLowerCase().includes("already done")) {
+                    showPaymentAlreadyDoneError(data.error);
+                } else {
+                    showStepError('step-2-error', data.detail || data.error || JSON.stringify(data));
+                }
+                return;
+            }
+
+            state.currentStep = 3;
+            renderStep3();
+            updateUI();
+
+        } catch (err) {
+            console.error(err);
+            showStepError('step-2-error', 'Network error. Please try again.');
+        } finally {
+            setLoading(controls.nextBtn, false);
+        }
+    }
+
+    // ─── Step 3: Payment ─────────────────────────────────────────────────────────
+    async function handlePayment() {
+        if (state.formConfig.fees_enable) {
+            if (!state.selectedPaymentMethod) {
+                showPaymentError('Please select a payment method before proceeding.');
+                return;
+            }
+            if (state.selectedPaymentMethod === 'online') {
+                await startOnlinePayment();
+            } else {
+                await startCashPayment();
+            }
+        } else {
+            await submitNoFee();
+        }
+    }
+
+    async function startOnlinePayment() {
+        setLoading(controls.payBtn, true);
+        try {
+            const res = await fetch(`${API_BASE}${ENDPOINTS.RAZOR_ORDER}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    amount:     state.formConfig.fees,
+                    student_id: state.studentId,
+                    form_id:    state.formConfig.id
+                })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                if (data.error && data.error.toLowerCase().includes("already done")) {
+                    showPaymentAlreadyDoneError(data.error);
+                } else {
+                    showPaymentError(data.error || data.detail || 'Failed to create payment order.');
+                }
+                return;
+            }
+
+            const options = {
+                key:         data.key,
+                amount:      data.amount,
+                currency:    "INR",
+                name:        state.formConfig.title || "Admission Form",
+                description: "Application Fee",
+                order_id:    data.id,
+                handler: async function(response) {
+                    await verifyRazorpayPayment(response, data);
+                },
+                theme: { color: "#4f46e5" }
+            };
+
+            const rzp = new Razorpay(options);
+            rzp.on('payment.failed', function(response) {
+                showPaymentError('Payment failed: ' + response.error.description);
+            });
+            rzp.open();
+
+        } catch (err) {
+            console.error(err);
+            showPaymentError('Network error. Please try again.');
+        } finally {
+            setLoading(controls.payBtn, false);
+        }
+    }
+
+    async function verifyRazorpayPayment(response, orderData) {
+        try {
+            const res = await fetch(`${API_BASE}${ENDPOINTS.VERIFY_PAYMENT}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    razorpay_order_id:   response.razorpay_order_id,
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_signature:  response.razorpay_signature,
+                    student_id:          orderData.student_id || state.studentId,
+                    form_id:             orderData.form_id    || state.formConfig.id
+                })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                showPaymentError(data.error || data.detail || 'Payment verification failed.');
+                return;
+            }
+
+            showSuccess('Payment verified! Your application is complete.');
+        } catch (err) {
+            console.error(err);
+            showPaymentError('Payment verification failed. Please contact support.');
+        }
+    }
+
+    async function startCashPayment() {
+        setLoading(controls.payBtn, true);
+        try {
+            const res = await fetch(`${API_BASE}${ENDPOINTS.OFFLINE_PAYMENT}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    amount:     state.formConfig.fees,
+                    form_id:    state.formConfig.id,
+                    student_id: state.studentId,
+                    school:     state.formConfig.school
+                })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                if (data.error && data.error.toLowerCase().includes("already done")) {
+                    showPaymentAlreadyDoneError(data.error);
+                } else {
+                    showPaymentError(data.error || data.detail || 'Cash payment registration failed.');
+                }
+                return;
+            }
+
+            showSuccess('Cash payment registered! Please pay at the school office.');
+        } catch (err) {
+            console.error(err);
+            showPaymentError('Network error. Please try again.');
+        } finally {
+            setLoading(controls.payBtn, false);
+        }
+    }
+
+    async function submitNoFee() {
+        showSuccess('Your application has been submitted successfully!');
+    }
+
+    // ─── Mobile Verification ─────────────────────────────────────────────────────
+    function openVerifyModal() {
+        document.getElementById('verify-modal').classList.remove('hidden');
+        document.getElementById('verify-mobile-input').value = '';
+        document.getElementById('verify-result').classList.add('hidden');
+        document.getElementById('verify-result').innerHTML = '';
+        lucide.createIcons();
+    }
+
+    function closeVerifyModal() {
+        document.getElementById('verify-modal').classList.add('hidden');
+    }
+
+    async function verifyMobile() {
+        const mobile = document.getElementById('verify-mobile-input').value.trim();
+        if (!mobile || mobile.length < 10) {
+            showVerifyResult('error', 'Please enter a valid 10-digit mobile number.');
+            return;
+        }
+
+        const btn = document.getElementById('verify-btn');
+        setLoading(btn, true);
+
+        try {
+            const res = await fetch(`${API_BASE}${ENDPOINTS.CHECK_MOBILE}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mobile: mobile })
+            });
+
+            const data = await res.json();
+
+            if (res.ok && data.status === 'used') {
+                // All done — show download option
+                showVerifyResult('used', data.message || 'This number is already used.', mobile);
+            } else if (res.ok && data.field_values) {
+                // Partial data — auto-fill and close
+                autoFillFromVerify(data);
+                closeVerifyModal();
+                showBanner('success', '✓ Application data loaded! Review and continue.');
+            } else {
+                // Fresh number
+                showVerifyResult('fresh', 'No existing application found. You can proceed with a new application.');
+            }
+        } catch (err) {
+            console.error(err);
+            showVerifyResult('error', 'Network error. Please try again.');
+        } finally {
+            setLoading(btn, false);
+        }
+    }
+
+    function showVerifyResult(type, message, mobile) {
+        const resultEl = document.getElementById('verify-result');
+        resultEl.classList.remove('hidden');
+
+        if (type === 'used') {
+            resultEl.innerHTML = `
+                <div class="verify-used-card">
+                    <div class="verify-used-icon"><i data-lucide="info"></i></div>
+                    <div>
+                        <p class="verify-used-msg">${message}</p>
+                        <div class="verify-used-actions">
+                            <button class="btn btn-outline btn-sm" onclick="closeVerifyModal()">
+                                <i data-lucide="edit-3"></i> Use Another Number
+                            </button>
+                            <button class="btn btn-primary btn-sm" onclick="goToReceipt('${mobile}')">
+                                <i data-lucide="download"></i> Download Receipt
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (type === 'fresh') {
+            resultEl.innerHTML = `
+                <div class="verify-ok-card">
+                    <i data-lucide="check-circle-2"></i>
+                    <p>${message}</p>
+                </div>
+            `;
+        } else {
+            resultEl.innerHTML = `
+                <div class="verify-error-card">
+                    <i data-lucide="alert-circle"></i>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+        lucide.createIcons();
+    }
+
+    function autoFillFromVerify(data) {
+        // Pre-populate field values
+        if (data.field_values && Array.isArray(data.field_values)) {
+            data.field_values.forEach(fv => {
+                state.formData[fv.field] = fv.value || '';
+            });
+        }
+        // studentId if returned
+        if (data.id) state.studentId = data.id;
+
+        // Re-render step 1 to show auto-filled data
+        renderStep1();
+        lucide.createIcons();
+    }
+
+    function goToReceipt(mobile) {
+        closeVerifyModal();
+        // Switch view
+        Object.values(views).forEach(v => v.classList.add('hidden'));
+        views.receipt.classList.remove('hidden');
+        renderReceiptPage(mobile);
+    }
+
+    function downloadReceipt(mobile) {
+        // Open/download receipt — adjust URL as needed based on backend
+        window.open(`${API_BASE}/receipt/?mobile=${mobile}`, '_blank');
+    }
+
+    // ─── Validation ──────────────────────────────────────────────────────────────
+    function validateCurrentStep() {
+        removeStepError('step-1-error');
+        removeStepError('step-2-error');
+        let isValid = true;
+
+        if (state.currentStep === 1) {
+            state.formConfig.sections.forEach(s => {
+                s.fields.forEach(f => {
+                    const el = document.getElementById(`field-${f.id}`);
+                    if (f.is_required && !state.formData[f.id]) {
+                        if (el) el.style.borderColor = 'var(--error)';
+                        isValid = false;
+                    } else if (el) {
+                        el.style.borderColor = '';
+                    }
+                });
+            });
+            if (!isValid) showStepError('step-1-error', 'Please fill all required fields before continuing.');
+        } else if (state.currentStep === 2) {
+            state.formConfig.label.forEach(doc => {
+                const isTextInput = doc.label.toLowerCase().includes("number") || doc.label.toLowerCase().includes("id");
+                if (isTextInput && !state.formData[`doc_${doc.id}`]) isValid = false;
+                else if (!isTextInput && !state.docFiles[doc.id]) isValid = false;
+            });
+            if (!isValid) showStepError('step-2-error', 'Please upload all required documents before continuing.');
+        }
+
+        return isValid;
+    }
+
+    // ─── UI Helpers ──────────────────────────────────────────────────────────────
+    function updateUI() {
+        const progress = (state.currentStep / 3) * 100;
+        controls.progressBar.style.width = `${progress}%`;
+        controls.stepBadge.textContent = `Step ${state.currentStep} of 3`;
+
+        Object.values(views).forEach(v => v.classList.add('hidden'));
+        const stepKey = `step${state.currentStep}`;
+        if (views[stepKey]) views[stepKey].classList.remove('hidden');
+
+        controls.prevBtn.disabled = state.currentStep === 1;
+        controls.nextBtn.classList.toggle('hidden', state.currentStep === 3);
+        controls.payBtn.classList.toggle('hidden', state.currentStep !== 3);
+
+        window.scrollTo(0, 0);
+    }
+
+    function showSuccess(msg) {
+        Object.values(views).forEach(v => v.classList.add('hidden'));
+        views.success.classList.remove('hidden');
+        document.getElementById('form-footer').classList.add('hidden');
+        document.querySelector('.progress-container').classList.add('hidden');
+        document.getElementById('success-message').textContent = msg;
+        lucide.createIcons();
+    }
+
+    function setLoading(btn, loading) {
+        if (!btn) return;
+        btn.disabled = loading;
+        if (loading) {
+            btn.dataset.originalHtml = btn.innerHTML;
+            btn.innerHTML = `<span class="spinner-sm"></span> Please wait...`;
+        } else {
+            btn.innerHTML = btn.dataset.originalHtml || btn.innerHTML;
+        }
+    }
+
+    function showStepError(id, msg) {
+        let el = document.getElementById(id);
+        if (!el) {
+            el = document.createElement('div');
+            el.id = id;
+            el.className = 'step-error';
+            const target = state.currentStep === 1
+                ? document.getElementById('dynamic-sections')
+                : document.getElementById('dynamic-documents');
+            if (target) target.after(el);
+        }
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+
+    function removeStepError(id) {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    }
+
+    function showPaymentError(msg) {
+        const el = document.getElementById('payment-error');
+        if (el) {
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+    }
+
+    function hidePaymentError() {
+        const el = document.getElementById('payment-error');
+        if (el) el.classList.add('hidden');
+    }
+
+    function showPaymentAlreadyDoneError(msg) {
+        // Payment already done — jump to success
+        showSuccess(msg || 'Payment process has already been completed for this application.');
+    }
+
+    function showBanner(type, msg) {
+        let banner = document.getElementById('global-banner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'global-banner';
+            banner.className = 'global-banner';
+            document.querySelector('.card-content').prepend(banner);
+        }
+        banner.textContent = msg;
+        banner.className = `global-banner global-banner-${type}`;
+        banner.classList.remove('hidden');
+        setTimeout(() => banner.classList.add('hidden'), 5000);
+    }
+
+    function hideLoading() {
+        screens.loading.classList.add('hidden');
+        screens.form.classList.remove('hidden');
+    }
+
+    function showError(msg) {
+        screens.loading.classList.add('hidden');
+        screens.error.classList.remove('hidden');
+        document.getElementById('error-message').textContent = msg;
+    }
+
+    // ─── Utility helpers ─────────────────────────────────────────────────────────
+    function getMobileFromFormData() {
+        // Try to find a "mobile" or "phone" field
+        for (const section of state.formConfig.sections) {
+            for (const field of section.fields) {
+                const label = field.label.toLowerCase();
+                if (label.includes('mobile') || label.includes('phone')) {
+                    return state.formData[field.id] || '';
+                }
+            }
+        }
+        return '';
+    }
+
+    function getSelectedClassName() {
+        for (const section of state.formConfig.sections) {
+            for (const field of section.fields) {
+                if (field.label.toLowerCase().includes('class')) {
+                    return state.formData[field.id];
+                }
+            }
+        }
+        return null;
+    }
+
+    // ─── Launch ───────────────────────────────────────────────────────────────────
+    init();
+
+</script>
+</body>
+</html>

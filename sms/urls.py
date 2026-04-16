@@ -97,7 +97,7 @@ router.register(r'leave-request', LeaveRequestView, basename='leave-request')#
 router.register(r'get-leave-requests', GetLeaveRequestView, basename='get-leave-requests')# For get leave request for principle with filter [school filter add remainig]
 router.register(r'change-leave-status', ChangeLeaveView, basename='change-leave-status')# For approve leave request for principle METHOD [PUT]
 router.register(r'announcements', AnnouncementView, basename='announcements')# For managing announcements
-
+router.register(r'get-announcements', GetAnnouncementView, basename='get-announcements')# For get announcement for student,staff with filter [school filter add remainig]   
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -133,11 +133,11 @@ urlpatterns = [
     # path('in/',TemplateView.as_view(template_name='index.html')),
    
     
-    path('razor/order/',RazorpayOrderView.as_view()),
-    path('payment/verify/',VerifyPaymentView.as_view()),
-    path('offline/payment/',OffilinePaymentView.as_view()),
-    path('get_receipt/<int:student_id>/<int:form_id>/',get_receipt),
-    path('webhook/',RazorpayWebhookView.as_view()),
+    path('api/razor/order/',RazorpayOrderView.as_view()),
+    path('api/payment/verify/',VerifyPaymentView.as_view()),
+    path('api/offline/payment/',OffilinePaymentView.as_view()),
+    path('api/get_receipt/<int:student_id>/<int:form_id>/',get_receipt),
+    path('api/webhook/',RazorpayWebhookView.as_view()),
     
      # Swagger UI
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0)),
