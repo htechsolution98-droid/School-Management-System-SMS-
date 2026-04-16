@@ -99,6 +99,7 @@ router.register(r'change-leave-status', ChangeLeaveView, basename='change-leave-
 router.register(r'announcements', AnnouncementView, basename='announcements')# For managing announcements
 router.register(r'get-announcements', GetAnnouncementView, basename='get-announcements')# For get announcement for student,staff with filter [school filter add remainig]   
 
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/',include(router.urls)),

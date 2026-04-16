@@ -35,6 +35,8 @@ class CustomUser(AbstractUser):
     school = models.ForeignKey(
         School, on_delete=models.CASCADE, null=True, blank=True, related_name="users"
     )
+    
+    
 
 
 class Staff(models.Model):

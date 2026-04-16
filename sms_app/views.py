@@ -585,6 +585,7 @@ class FormStatus(ModelViewSet):
         )
 
 
+
 # for send form link
 @api_view(["GET"])
 def ShareFormLink(request):
@@ -718,9 +719,10 @@ from sms_app.razorpay_client import client
 from rest_framework.views import APIView
 
 
+
+
 class RazorpayOrderView(APIView):
     def post(self, request):
-        # user = request.user
         amount = int(request.data.get("amount")) * 100
         student_id = request.data.get("student_id")
         form_id = request.data.get("form_id")
@@ -1546,6 +1548,7 @@ class GetRemainingLeaveView(APIView):
         return Response(serializer.data)
 
 
+
 class AnnouncementView(ModelViewSet):
     queryset = Announcement.objects.all()
     serializer_class = AnnouncementSerializer
@@ -1561,10 +1564,41 @@ class GetAnnouncementView(ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         now = timezone.now()
-        
 
-        if Announcement.objects.filter(school=user.school, targets__target_type="all", start_date__lte=now, end_date__gte=now).exists():
-            return Announcement.objects.filter(school=user.school, targets__target_type="all", start_date__lte=now, end_date__gte=now).distinct()
-        
-        if Announcement.objects.filter(school=user.school, targets__target_type="student", start_date__lte=now, end_date__gte=now).exists():
-            return Announcement.objects.filter(school=user.school, targets__target_type="student", start_date__lte=now, end_date__gte=now).distinct()
+        print(user.id)
+        print(type(user.id))
+        # Base filter (active announcements)
+        base_filter = Q(
+            school=user.school,
+            publish_at__lte=now
+        ) & (Q(expires_at__gte=now) | Q(expires_at__isnull=True))
+
+        # 1️⃣ ALL users
+        # all_filter = Q(targets__target_type='ALL')
+
+        # 2️⃣ SPECIFIC user
+        specific_filter = Q(
+            targets__target_type='SPECIFIC',
+            targets__target_id=user.id
+        )
+
+        # 3️⃣ ROLE-based
+        user_groups = user.groups.values_list('id', flat=True)
+        print(user_groups)
+        role_filter = Q(
+            targets__target_type='ROLE',
+            targets__target_id__in=user_groups
+        )
+
+        # 4️⃣ CLASS-based (only if student)
+        class_filter = Q()
+        if hasattr(user, "student"):
+            class_filter = Q(
+                targets__target_type='CLASS',
+                targets__target_id=user.student.school_class_id
+            )
+
+        # Combine everything
+        queryset = Announcement.objects.filter(specific_filter   | base_filter  ).order_by('-created_at')
+
+        return queryset
