@@ -612,4 +612,33 @@ class StaffRemainingLeave(models.Model):
 
     def __str__(self):
         return f"{self.staff} - {self.leave_template}"
-    
+
+
+
+
+
+class Announcement(models.Model):
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+
+    publish_at = models.DateTimeField()   # when it becomes visible
+    expires_at = models.DateTimeField(null=True, blank=True)  # optional
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class AnnouncementTarget(models.Model):
+    TARGET_TYPE = [
+        ('ALL', 'All'),
+        ('ROLE', 'Role'),
+        ('CLASS', 'Class'),
+        ('USER', 'Specific User'),
+    ]
+
+    announcement = models.ForeignKey(
+        Announcement,
+        on_delete=models.CASCADE,
+        related_name='targets'
+    )
+
+    target_type = models.CharField(max_length=10, choices=TARGET_TYPE)
+    target_id = models.IntegerField(null=True, blank=True)

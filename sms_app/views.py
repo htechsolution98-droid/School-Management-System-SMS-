@@ -588,7 +588,7 @@ class FormStatus(ModelViewSet):
 def ShareFormLink(request):
     form = AdmissionForm.objects.filter(is_active=True).first()
 
-    form_link = f"http://127.0.0.1:8000/admission/{form.unique_link}/"
+    form_link = f"/admission/{form.unique_link}/"
 
     return Response({"form_link": form_link})
 

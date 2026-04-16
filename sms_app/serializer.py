@@ -1603,3 +1603,19 @@ class GetRemainingLeaveSerializer(serializers.ModelSerializer):
     class Meta:
         model = StaffRemainingLeave
         fields = ["leave_template"]
+
+
+class AnnouncementTargetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AnnouncementTarget
+        fields = "__all__"
+        read_only_fields = ["school"]
+
+class AnnouncementSerializer(serializers.ModelSerializer):
+    targets = AnnouncementTargetSerializer(many=True, required=False)
+    class Meta:
+        model = Announcement
+        fields = ["id", "title", "description", "publish_at", "expires_at", "created_at", "targets", "school", "created_by"]
+        read_only_fields = ["school", "created_by"]
+        
+        
