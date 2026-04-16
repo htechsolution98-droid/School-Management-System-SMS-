@@ -110,7 +110,7 @@ urlpatterns = [
     
     path('api/fields/<str:unique_link>/', FormFieldViewSet.as_view()),
     
-     path('admission/<str:unique_link>/',Admission),
+     path('api/admission/<str:unique_link>/',Admission),
      path('api/admission/form/link/',ShareFormLink), #to get active form link for admission form fill up
      path('checkmobile/',CheckMobileAPIView.as_view()),
      
