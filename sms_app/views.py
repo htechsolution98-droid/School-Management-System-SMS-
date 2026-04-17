@@ -195,7 +195,7 @@ def send_otp_email(email, otp, user_name=None):
     email_message = EmailMultiAlternatives(
         subject=subject,
         body=f"Your OTP is {otp}",  # fallback (plain text)
-        from_email=settings.EMAIL_HOST_USER, 
+        from_email="yash.error.1@gmail.com",
         to=[email],
     )
 
