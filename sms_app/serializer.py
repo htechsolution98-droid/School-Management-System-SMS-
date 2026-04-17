@@ -61,7 +61,7 @@ class StaffSerializer(serializers.ModelSerializer):
 class GetTeacherSerializer(serializers.ModelSerializer):
     class Meta:
         model = Staff
-        fields = "__all__"
+        fields = ['id', 'name']
 
 
 class StudentSignUpSerliazer(serializers.ModelSerializer):
@@ -809,6 +809,10 @@ class AssignClassSerializer(serializers.ModelSerializer):
         model = AssignClass
         fields = "__all__"
 
+    def create(self, validated_data):
+        school = self.context["request"].user.school
+        validated_data["school"] = school
+        return super().create(validated_data)
 
 # class Tt_daySerializer(serializers.ModelSerializer):
 #     class Meta:

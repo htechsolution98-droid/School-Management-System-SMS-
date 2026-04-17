@@ -36,7 +36,17 @@ class CustomUser(AbstractUser):
         School, on_delete=models.CASCADE, null=True, blank=True, related_name="users"
     )
     
+    ROLE_CHOICES = [
+        ("TEACHER", "Teacher"),
+        ("CLERK", "Clerk"),
+        ("LIBRARIAN", "Librarian"),
+        ("FEE MANAGEMENT", "Fee Management "),
+        ("PRINCIPAL", "Principal"),
+        ("TRANSOPORTATION", "Transportation "),
+        ("INVENTORY", "Inventory "),
+    ]
     
+    role = models.CharField(max_length=50, choices=ROLE_CHOICES, blank=True, null=True)
 
 
 class Staff(models.Model):

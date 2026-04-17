@@ -1,6 +1,7 @@
 from urllib import response
 
 from django.shortcuts import render
+from requests import get
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -295,6 +296,7 @@ class StaffView(ModelViewSet):
 
         user = User(username=username)
         user.school = self.request.user.school
+        user.role = category    
         user.set_password(username)
         user.save()
 
@@ -321,10 +323,12 @@ class StaffView(ModelViewSet):
 class GetTeacherView(ModelViewSet):
     queryset = Staff.objects.all()
     serializer_class = GetTeacherSerializer
+    permission_classes = [IsAuthenticated, IsCLerk]
     http_method_names = ["get"]
 
     def get_queryset(self):
-        return Staff.objects.filter(user__groups__name="TEACHER")
+        school = self.request.user.school
+        return Staff.objects.filter(school=school, user__groups__name="TEACHER")
 
 
 class StudentSignUpView(ModelViewSet):
@@ -596,21 +600,32 @@ def ShareFormLink(request):
     return Response({"form_link": form_link})
 
 
-# this for craete admission link
+from django.shortcuts import redirect, render
+from django.urls import reverse
+
+FRONTEND_LOGIN_URL = "https://edunet-one.vercel.app/login"
+
 def Admission(request, unique_link):
     form = AdmissionForm.objects.filter(unique_link=unique_link).first()
 
     if not form:
-        school = School.objects.filter(login_id=form.school)
-        return render(
-            request, "error.html", {"mobile": school.email, "email": school.phone}
-        )
+        return render(request, "error.html", {
+            "message": "Invalid admission link"
+        })
 
-    # if not form.is_active:
-    #     return render(request, "error.html", {"message": "Form Is Not Active"})
+    # ❌ Block if inactive
+    if not form.is_active:
+        return render(request, "error.html", {
+            "message": "Admission form is closed"
+        })
 
-    return render(request, "index.html", {"unique_link": unique_link})
+    # 🔒 Redirect to frontend login
+    if not request.user.is_authenticated:
+        return redirect(f"{FRONTEND_LOGIN_URL}?next=/admission/{unique_link}")
 
+    return render(request, "index.html", {
+        "unique_link": unique_link
+    })
 
 class FormSubmissionViewSet(ModelViewSet):
     queryset = Student.objects.all()
@@ -1097,11 +1112,11 @@ class SetSubjectView(ModelViewSet):
         instance = serializer.save(school=request.user.school)
 
         school_id = request.user.school.id
-        school_class = instance.SchoolClass_id
+        # school_class = instance.SchoolClass_id
 
         try:
             cache.delete(f"subjects_{school_id}_all")
-            cache.delete(f"subjects_{school_id}_{school_class}")
+            # cache.delete(f"subjects_{school_id}_{school_class}")
         except Exception:
             pass
 
@@ -1173,11 +1188,11 @@ class SetSubjectView(ModelViewSet):
         instance = serializer.save()
 
         school_id = instance.school.id
-        school_class = instance.SchoolClass_id
+        # school_class = instance.SchoolClass_id
 
         try:
             cache.delete(f"subjects_{school_id}_all")
-            cache.delete(f"subjects_{school_id}_{school_class}")
+            # cache.delete(f"subjects_{school_id}_{school_class}")
             cache.delete(f"subject_{instance.id}")
         except Exception:
             pass
@@ -1300,7 +1315,12 @@ class SyllabusView(ModelViewSet):
 class AssignClassView(ModelViewSet):
     queryset = AssignClass.objects.all()
     serializer_class = AssignClassSerializer
-
+    permission_classes = [IsAuthenticated, IsCLerk] 
+    
+    def get_queryset(self):
+        
+        return AssignClass.objects.filter(school=self.request.user.school) 
+    
 
 # ========= TIME TABLE VIEWs============
 
