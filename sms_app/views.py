@@ -217,12 +217,12 @@ class SendOTPView(APIView):
             mobile=mobile if mobile else None,
             otp=otp
         )
-        if email:
-            send_otp_email(
-                email=email,
-                otp=otp
+        # if email:
+        #     send_otp_email(
+        #         email=email,
+        #         otp=otp
             
-            )
+        #     )
         # if email:
             # send_mail(
             #     subject="Your OTP Code",
