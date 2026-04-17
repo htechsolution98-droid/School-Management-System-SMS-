@@ -188,8 +188,8 @@ EMAIL_POST = 587
 
 EMAIL_USE_TLS = True
 
-EMAIL_HOST_USER = 'htechsolution98@gmail.com'
+EMAIL_HOST_USER = 'yash.error.1@gmail.com'
 
-EMAIL_HOST_PASSWORD = 'dqkxmapewnozwxrg'
+EMAIL_HOST_PASSWORD = 'zjsartihpvaqfvpi'
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

@@ -176,7 +176,31 @@ from rest_framework import status
 # from .serializers import SendOTPSerializer, VerifyOTPSerializer
 from .models import OTP
 import random
+from django.core.mail import send_mail
 
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
+
+def send_otp_email(email, otp, user_name=None):
+    subject = "Your OTP Code"
+    
+    html_content = render_to_string(
+        "otp_email.html",
+        {
+            "otp": otp,
+            "user_name": user_name
+        }
+    )
+
+    email_message = EmailMultiAlternatives(
+        subject=subject,
+        body=f"Your OTP is {otp}",  # fallback (plain text)
+        from_email=settings.EMAIL_HOST_USER, 
+        to=[email],
+    )
+
+    email_message.attach_alternative(html_content, "text/html")
+    email_message.send()
 
 class SendOTPView(APIView):
     def post(self, request):
@@ -193,6 +217,19 @@ class SendOTPView(APIView):
             mobile=mobile if mobile else None,
             otp=otp
         )
+        if email:
+            send_otp_email(
+                email=email,
+                otp=otp
+            
+            )
+        # if email:
+            # send_mail(
+            #     subject="Your OTP Code",
+            #     message=f"Your OTP is {otp}. It is valid for 5 minutes.",
+            #     from_email=",
+            #     recipient_list=[email],
+            # )
 
         return Response({
             "message": "OTP sent successfully",
