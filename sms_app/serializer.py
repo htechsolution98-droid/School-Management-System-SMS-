@@ -11,6 +11,142 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
+class SendOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False)
+    mobile = serializers.CharField(required=False)
+
+    def validate(self, data):
+        email = data.get("email")
+        mobile = data.get("mobile")
+
+        if not email and not mobile:
+            raise serializers.ValidationError("Provide email or mobile")
+
+        if email and mobile:
+            raise serializers.ValidationError("Provide only one (email or mobile)")
+
+        return data
+import random
+# from django.contrib.auth.models import User
+from rest_framework import serializers
+from .models import OTP, UserProfile
+
+
+class VerifyOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False)
+    mobile = serializers.CharField(required=False)
+    otp = serializers.CharField(max_length=6)
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        email = data.get("email")
+        mobile = data.get("mobile")
+        otp = data.get("otp")
+
+        if not email and not mobile:
+            raise serializers.ValidationError("Provide email or mobile")
+
+        if email and mobile:
+            raise serializers.ValidationError("Provide only one")
+
+        # 🔍 Check OTP
+        otp_obj = OTP.objects.filter(
+            email=email if email else None,
+            mobile=mobile if mobile else None,
+            otp=otp
+        ).order_by('-created_at').first()
+
+        if not otp_obj:
+            raise serializers.ValidationError("Invalid OTP")
+
+        data["otp_obj"] = otp_obj
+        return data
+
+    def create(self, validated_data):
+        email = validated_data.get("email")
+        mobile = validated_data.get("mobile")
+        password = validated_data.get("password")
+
+        # 🔥 Generate username
+        if email:
+            base_username = email.split("@")[0][:4]
+        else:
+            base_username = mobile[-4:]
+
+        username = base_username
+
+        # Ensure unique username
+        counter = 1
+        while User.objects.filter(username=username).exists():
+            username = f"{base_username}{counter}"
+            counter += 1
+
+        # 👤 Create User
+        user = User.objects.create_user(
+            username=username,
+            email=email if email else "",
+        )
+        user.set_password(password)
+        user.save()
+        group, created = Group.objects.get_or_create(name="temp_user")
+        user.groups.add(group)
+        # 📱 Store mobile in profile
+        if mobile:
+            UserProfile.objects.create(user=user, mobile=mobile)
+        else:
+            UserProfile.objects.create(user=user)
+
+        # ❌ Delete OTP after use
+        validated_data["otp_obj"].delete()
+
+        return user
+
+
+from rest_framework import serializers
+from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import check_password
+from .models import UserProfile
+
+User = get_user_model()
+
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False)
+    mobile = serializers.CharField(required=False)
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        email = data.get("email")
+        mobile = data.get("mobile")
+        password = data.get("password")
+
+        if not email and not mobile:
+            raise serializers.ValidationError("Provide email or mobile")
+
+        if email and mobile:
+            raise serializers.ValidationError("Provide only one")
+
+        user = None
+
+        # 🔍 Find user by email
+        if email:
+            user = User.objects.filter(email=email).first()
+
+        # 🔍 Find user by mobile (via profile)
+        elif mobile:
+            profile = UserProfile.objects.filter(mobile=mobile).select_related("user").first()
+            user = profile.user if profile else None
+
+        if not user:
+            raise serializers.ValidationError("User not found")
+
+        # 🔐 Password check
+        if not user.check_password(password):
+            raise serializers.ValidationError("Invalid credentials")
+
+        data["user"] = user
+        return data
+
 
 def generate_student_username(name):
     Staff_name = name.split(" ")[0]

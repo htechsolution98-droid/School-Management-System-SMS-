@@ -106,8 +106,14 @@ urlpatterns = [
     path('api/access/',CustomLoginView.as_view()),  
         
     path('api/refresh/',TokenRefreshView.as_view()),
+    
 
     path('api/get-location/', GetLocationView.as_view()), #for attendance location
+    
+    
+    path('api/api-login/', LoginView.as_view()),
+    path('api/send-otp/', SendOTPView.as_view()),
+    path('api/verify-otp/', VerifyOTPView.as_view()),
     
     path('api/set-slot/', SetSlotView),
     

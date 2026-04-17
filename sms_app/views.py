@@ -150,6 +150,98 @@ def generate_staff_username(name):
 
 # ======END CODE for GENERATE ID & CODE =====
 
+def generate_username(email=None, mobile=None, otp=None):
+    if email:
+        base = email.split("@")[0][:4]   # first 4 chars
+    else:
+        base = mobile[-4:]              # last 4 digits of mobile
+
+    otp_part = otp[-3:] if otp else str(random.randint(100, 999))
+
+    username = f"{base}{otp_part}".lower()
+
+    # Ensure uniqueness
+    while User.objects.filter(username=username).exists():
+        random_suffix = ''.join(random.choices(string.digits, k=3))
+        username = f"{base}{random_suffix}"
+
+    return username
+
+#========= TO GENERATE OTP=========
+def generate_otp():
+    return str(random.randint(100000, 999999))
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+# from .serializers import SendOTPSerializer, VerifyOTPSerializer
+from .models import OTP
+import random
+
+
+class SendOTPView(APIView):
+    def post(self, request):
+        serializer = SendOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data.get("email")
+        mobile = serializer.validated_data.get("mobile")
+
+        otp = str(random.randint(100000, 999999))
+
+        OTP.objects.create(
+            email=email if email else None,
+            mobile=mobile if mobile else None,
+            otp=otp
+        )
+
+        return Response({
+            "message": "OTP sent successfully",
+            "otp": otp  # ⚠️ remove in production
+        })
+
+
+class VerifyOTPView(APIView):
+    def post(self, request):
+        serializer = VerifyOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.save()
+
+        return Response({
+            "message": "User registered successfully",
+            "username": user.username
+        }, status=status.HTTP_201_CREATED)
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
+
+class LoginView(APIView):
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.validated_data["user"]
+
+        # 🎟 JWT Token
+        refresh = RefreshToken.for_user(user)
+
+        # 👥 Roles from Groups
+        roles = list(user.groups.values_list("name", flat=True))
+
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "roles": roles
+            }
+        }, status=status.HTTP_200_OK)
 
 # =========PERMISSIONS===========
 class Is_super_admin(BasePermission):
