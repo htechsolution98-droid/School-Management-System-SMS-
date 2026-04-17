@@ -63,7 +63,8 @@ router.register(r'formstatus', FormStatus, basename='formstatus')# For Principle
 router.register(r'submissions', FormSubmissionViewSet, basename='submissions')# admission form fill fields METHOD [POST]  ----API Need---  api/schoolclass/ for class drop down
 router.register(r'documentsubmission', DocumentSubmissionView, basename='documentsubmission')# admission form fill fields METHOD [POST]  ----API Need---  api/schoolclass/ for class drop down
 
-
+router.register(r'gettempuserdata', TempUserGetAdmissionDataView, basename='gettempuserdata')# For student to check admission status METHOD [GET]  api/admissionstatus/<int:student_id>/
+ 
 #===== set only use get this api====== 
 router.register(r'StudentDataview', FormSubmissionReadView, basename='StudentDataview') # Not in use
 

@@ -11,6 +11,7 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
+
 class SendOTPSerializer(serializers.Serializer):
     email = serializers.EmailField(required=False)
     mobile = serializers.CharField(required=False)
@@ -26,11 +27,13 @@ class SendOTPSerializer(serializers.Serializer):
             raise serializers.ValidationError("Provide only one (email or mobile)")
 
         return data
+
+
 import random
+
 # from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import OTP, UserProfile
-
+# from .models import OTP, UserProfile
 
 class VerifyOTPSerializer(serializers.Serializer):
     email = serializers.EmailField(required=False)
@@ -49,12 +52,15 @@ class VerifyOTPSerializer(serializers.Serializer):
         if email and mobile:
             raise serializers.ValidationError("Provide only one")
 
-        # 🔍 Check OTP
-        otp_obj = OTP.objects.filter(
-            email=email if email else None,
-            mobile=mobile if mobile else None,
-            otp=otp
-        ).order_by('-created_at').first()
+        # 🔍 OTP check (safe filtering)
+        query = OTP.objects.filter(otp=otp)
+
+        if email:
+            query = query.filter(email=email)
+        if mobile:
+            query = query.filter(mobile=mobile)
+
+        otp_obj = query.order_by("-created_at").first()
 
         if not otp_obj:
             raise serializers.ValidationError("Invalid OTP")
@@ -66,38 +72,35 @@ class VerifyOTPSerializer(serializers.Serializer):
         email = validated_data.get("email")
         mobile = validated_data.get("mobile")
         password = validated_data.get("password")
+        otp_obj = validated_data["otp_obj"]
 
-        # 🔥 Generate username
+        # 🔥 Username generation
         if email:
             base_username = email.split("@")[0][:4]
         else:
             base_username = mobile[-4:]
 
         username = base_username
-
-        # Ensure unique username
         counter = 1
+
         while User.objects.filter(username=username).exists():
             username = f"{base_username}{counter}"
             counter += 1
 
-        # 👤 Create User
+        # 👤 Create USER (ONLY ONE TABLE: customuser)
         user = User.objects.create_user(
             username=username,
-            email=email if email else "",
+            email=email,
+            mobile=mobile,
+            password=password
         )
-        user.set_password(password)
-        user.save()
-        group, created = Group.objects.get_or_create(name="temp_user")
-        user.groups.add(group)
-        # 📱 Store mobile in profile
-        if mobile:
-            UserProfile.objects.create(user=user, mobile=mobile)
-        else:
-            UserProfile.objects.create(user=user)
 
-        # ❌ Delete OTP after use
-        validated_data["otp_obj"].delete()
+        # 👥 Assign group (optional)
+        group, _ = Group.objects.get_or_create(name="temp_user")
+        user.groups.add(group)
+
+        # ❌ Delete OTP after success
+        otp_obj.delete()
 
         return user
 
@@ -105,7 +108,7 @@ class VerifyOTPSerializer(serializers.Serializer):
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password
-from .models import UserProfile
+# from .models import UserProfile
 
 User = get_user_model()
 
@@ -120,6 +123,9 @@ class LoginSerializer(serializers.Serializer):
         mobile = data.get("mobile")
         password = data.get("password")
 
+        email = email.lower().strip() if email else None
+        mobile = mobile.strip() if mobile else None
+
         if not email and not mobile:
             raise serializers.ValidationError("Provide email or mobile")
 
@@ -127,22 +133,25 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("Provide only one")
 
         user = None
+        
+        print("EMAIL", email)
+        print("USER", user)
 
         # 🔍 Find user by email
-        if email:
-            user = User.objects.filter(email=email).first()
+        user = (
+            CustomUser.objects.filter(
+                email=email.lower().strip() if email else None
+            ).first()
+            if email
+            else CustomUser.objects.filter(mobile=mobile.strip()).first()
+        )
 
-        # 🔍 Find user by mobile (via profile)
-        elif mobile:
-            profile = UserProfile.objects.filter(mobile=mobile).select_related("user").first()
-            user = profile.user if profile else None
-
-        if not user:
-            raise serializers.ValidationError("User not found")
-
-        # 🔐 Password check
-        if not user.check_password(password):
+        # 🔐 Combined check (important)
+        if not user or not user.check_password(password):
             raise serializers.ValidationError("Invalid credentials")
+
+        if not user.is_active:
+            raise serializers.ValidationError("Account disabled")
 
         data["user"] = user
         return data
@@ -189,15 +198,21 @@ class StaffSerializer(serializers.ModelSerializer):
         read_only_fields = ["user", "school"]
 
     def validate_email(self, value):
-        if School.objects.filter(email=value).exists():
+        if User.objects.filter(email=value).exists(): # for filter use User model not staff model because email is in user model
             raise serializers.ValidationError("Email is already exists.")
+        
+        return value
+    def validate_mobile(self, value):
+        if User.objects.filter(mobile=value).exists(): # for filter use User model not staff model because mobile is in user model
+            raise serializers.ValidationError("Mobile number is already exists.")
+        
         return value
 
 
 class GetTeacherSerializer(serializers.ModelSerializer):
     class Meta:
         model = Staff
-        fields = ['id', 'name']
+        fields = ["id", "name"]
 
 
 class StudentSignUpSerliazer(serializers.ModelSerializer):
@@ -566,7 +581,15 @@ class FormSubmissionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Student
-        fields = ["id", "form", "school", "school_class", "mobile", "field_values"]
+        fields = [
+            "id",
+            "temp_user",
+            "form",
+            "school",
+            "school_class",
+            "mobile",
+            "field_values",
+        ]
 
     def validate(self, data):
         form = data["form"]
@@ -598,12 +621,11 @@ class FormSubmissionSerializer(serializers.ModelSerializer):
         mobile = validated_data.pop("mobile")
         school_class = validated_data.pop("school_class")
         school = validated_data.pop("school")
-
-        if Student.objects.filter(mobile=mobile, details_done=True).exists():
-            raise ValidationError({"Error": "This number is not available"})
+        id = validated_data.get("id")
+        temp_user = self.context["request"].user
 
         #  check existing student
-        student = Student.objects.filter(mobile=mobile, details_done=False).first()
+        student = Student.objects.filter(id=id, school=school, details_done=False).first()
 
         if student:
             #  UPDATE EXISTING STUDENT
@@ -626,7 +648,11 @@ class FormSubmissionSerializer(serializers.ModelSerializer):
         else:
             #  CREATE NEW STUDENT
             submission = Student.objects.create(
-                form=form, school=school, mobile=mobile, school_class=school_class
+                temp_user=temp_user,
+                form=form,
+                school=school,
+                mobile=mobile,
+                school_class=school_class,
             )
 
             values = []
@@ -697,6 +723,31 @@ class DocumentSubmissionSerialiser(serializers.ModelSerializer):
 
 
 # =======================================================================
+
+class StudentFieldValueReadSerializerForTemp_user(serializers.ModelSerializer):
+    field_label = serializers.CharField(source="field.label", read_only=True)
+
+    class Meta:
+        model = StudentFieldValue
+        fields = ["id", "field", "field_label", "value"]
+
+class TempUserGetAdmissionDataSerializer(serializers.ModelSerializer):
+    field_values = StudentFieldValueReadSerializerForTemp_user(many=True, read_only=True)
+
+    class Meta:
+        model = Student
+        fields = [
+            "id",
+            "mobile",
+            "school_class",
+            "division",
+            "clerk_verified",
+            "clerk_verified_at",
+            "gr_no",
+            "field_values",
+            "user",
+            "school",
+        ]
 
 
 class MobileCheckSerializer(serializers.Serializer):
@@ -944,11 +995,35 @@ class AssignClassSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssignClass
         fields = "__all__"
+    
+    def validate(self, data):
+        school = self.context["request"].user.school
+        division = data.get("division")
+        teacher = data.get("teacher")
+        is_class_teacher = data.get("is_class_teacher", False)
 
+        if is_class_teacher:
+            if AssignClass.objects.filter(
+                school=school,
+                division=division,
+                is_class_teacher=True
+            ).exists():
+                raise serializers.ValidationError("Class already has class teacher")
+
+            if AssignClass.objects.filter(
+                school=school,
+                teacher=teacher,
+                is_class_teacher=True
+            ).exists():
+                raise serializers.ValidationError("Teacher already assigned")
+
+        return data
+    
     def create(self, validated_data):
         school = self.context["request"].user.school
         validated_data["school"] = school
         return super().create(validated_data)
+
 
 # class Tt_daySerializer(serializers.ModelSerializer):
 #     class Meta:
@@ -1335,27 +1410,33 @@ class GetStudentSerializer(serializers.ModelSerializer):
 class AttendanceLocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttendanceLocation
-        fields = ["latitude", "longitude", "radius", "school", "start_time", "end_time", "half_day_time"]
-        read_only_fields = ['school']
+        fields = [
+            "latitude",
+            "longitude",
+            "radius",
+            "school",
+            "start_time",
+            "end_time",
+            "half_day_time",
+        ]
+        read_only_fields = ["school"]
 
     def create(self, validated_data):
         request = self.context.get("request")
-        
+
         start_time = request.data.get("start_time")
         end_time = request.data.get("end_time")
         half_day_time = request.data.get("half_day_time")
-        
+
         AttendanceTimeRule.objects.create(
             school=request.user.school,
             start_time=start_time,
             end_time=end_time,
-            half_day_time=half_day_time
+            half_day_time=half_day_time,
         )
-        
+
         school = request.user.school
-        
-        
-        
+
         return AttendanceLocation.objects.create(school=school, **validated_data)
 
 
@@ -1750,35 +1831,44 @@ class AnnouncementTargetSerializer(serializers.ModelSerializer):
     class Meta:
         model = AnnouncementTarget
         fields = "__all__"
-        read_only_fields = ["school","announcement"]
+        read_only_fields = ["school", "announcement"]
+
 
 class AnnouncementSerializer(serializers.ModelSerializer):
     targets = AnnouncementTargetSerializer(many=True, required=False)
+
     class Meta:
         model = Announcement
-        fields = ["id", "title", "description", "publish_at", "expires_at", "targets", "school"]
+        fields = [
+            "id",
+            "title",
+            "description",
+            "publish_at",
+            "expires_at",
+            "targets",
+            "school",
+        ]
         read_only_fields = ["school"]
-        
-        
+
     def create(self, validated_data):
         targets_data = validated_data.pop("targets", [])
-        user = self.context["request"].user 
-        
+        user = self.context["request"].user
+
         print(targets_data)
-        
+
         announcement = Announcement.objects.create(school=user.school, **validated_data)
-        
+
         for target_data in targets_data:
-            AnnouncementTarget.objects.create( school=user.school, announcement=announcement, **target_data)
-        
+            AnnouncementTarget.objects.create(
+                school=user.school, announcement=announcement, **target_data
+            )
+
         return announcement
-    
 
 
 class GetAnnouncementSerializer(serializers.ModelSerializer):
     targets = AnnouncementTargetSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = Announcement
         fields = ["id", "title", "description", "publish_at", "expires_at", "targets"]
-        

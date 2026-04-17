@@ -217,12 +217,12 @@ class SendOTPView(APIView):
             mobile=mobile if mobile else None,
             otp=otp
         )
-        # if email:
-        #     send_otp_email(
-        #         email=email,
-        #         otp=otp
+        if email:
+            send_otp_email(
+                email=email,
+                otp=otp
             
-        #     )
+            )
         # if email:
             # send_mail(
             #     subject="Your OTP Code",
@@ -246,7 +246,6 @@ class VerifyOTPView(APIView):
 
         return Response({
             "message": "User registered successfully",
-            "username": user.username
         }, status=status.HTTP_201_CREATED)
 
 
@@ -272,12 +271,7 @@ class LoginView(APIView):
         return Response({
             "access": str(refresh.access_token),
             "refresh": str(refresh),
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "roles": roles
-            }
+            "roles": roles
         }, status=status.HTTP_200_OK)
 
 # =========PERMISSIONS===========
@@ -324,6 +318,14 @@ class Isstudent(BasePermission):
             and request.user.is_authenticated
             and request.user.groups.filter(name="student").exists()
         )
+        
+class IsTempUser(BasePermission):
+    def has_permission(self, request, view):
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.groups.filter(name="temp_user").exists()
+        )
 
 
 class SchoolView(ModelViewSet):
@@ -360,18 +362,28 @@ class SchoolView(ModelViewSet):
     # Create school + clear cache
     def perform_create(self, serializer):
         name = serializer.validated_data.get("name")
+        email = serializer.validated_data.get("email")
+        
         school_code = generate_school_code(name)
+        
+        if User.objects.filter(username=school_code).exists():
+            school_code = generate_school_code(name)
+            
+        if not email:
+            raise serializers.ValidationError("Provide email for school admin user")
 
         with transaction.atomic():
             user = User.objects.create(username=school_code)
-            password = school_code
+            user.email = email
+            user.role = "admin(trustee)"
+            password = "123456"
             user.set_password(password)
             user.save()
 
             group, created = Group.objects.get_or_create(name="admin(trustee)")
             user.groups.add(group)
 
-            school = serializer.save(code=school_code, login_id=user)
+            school = serializer.save(login_id=user)
             user.school = school
             user.save()
 
@@ -413,11 +425,20 @@ class StaffView(ModelViewSet):
             cache.set(cache_key, staff_qs, timeout=60 * 60 * 5)  # 5 hours cache
 
         return staff_qs
-
+    
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        return Response({"message": "Staff created successfully"}, status=status.HTTP_201_CREATED)  
+    
     # 🔹 Create staff + clear cache
     def perform_create(self, serializer):
         name = serializer.validated_data.get("name")
         category = serializer.validated_data.get("category")
+        email = serializer.validated_data.get("email")
+        mobile = serializer.validated_data.get("mobile")
+
+        if not email and not mobile:
+            raise serializers.ValidationError("Provide email or mobile for staff user") 
 
         group, created = Group.objects.get_or_create(name=category)
 
@@ -425,8 +446,10 @@ class StaffView(ModelViewSet):
 
         user = User(username=username)
         user.school = self.request.user.school
-        user.role = category    
-        user.set_password(username)
+        user.role = category
+        user.email = email if email else None
+        user.mobile = mobile if mobile else None
+        user.set_password("123456")
         user.save()
 
         user.groups.add(group)
@@ -531,6 +554,13 @@ class StudentSignUpView(ModelViewSet):
 
 #         return queryset
 
+class TempUserGetAdmissionDataView(ModelViewSet):
+    queryset = Student.objects.all()    
+    serializer_class = TempUserGetAdmissionDataSerializer
+    permission_classes = [IsAuthenticated, IsTempUser]  
+
+    def get_queryset(self):
+        return Student.objects.filter(user=self.request.user)
 
 class StudentFIllView(ModelViewSet):
     queryset = Student.objects.all()
@@ -758,7 +788,7 @@ def Admission(request, unique_link):
 
 class FormSubmissionViewSet(ModelViewSet):
     queryset = Student.objects.all()
-    # serializer_class = [Isstudent]
+    serializer_class = [IsTempUser]
     serializer_class = FormSubmissionSerializer
 
     # def get_serializer_class(self):

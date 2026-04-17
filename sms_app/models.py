@@ -11,12 +11,7 @@ class OTP(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
-class UserProfile(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    mobile = models.CharField(max_length=15, unique=True, null=True, blank=True)
 
-    def __str__(self):
-        return self.user.username
     
 class School(models.Model):
 
@@ -25,7 +20,7 @@ class School(models.Model):
     )
 
     name = models.CharField(max_length=255, null=True, blank=True)
-    code = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    code = models.CharField(max_length=50, null=True, blank=True)
 
     email = models.EmailField(null=True, blank=True)
     phone = models.CharField(max_length=15, null=True, blank=True)
@@ -48,6 +43,12 @@ class CustomUser(AbstractUser):
     school = models.ForeignKey(
         School, on_delete=models.CASCADE, null=True, blank=True, related_name="users"
     )
+    
+    email = models.EmailField(unique=True, null=True, blank=True)
+    mobile = models.CharField(max_length=15, unique=True, null=True, blank=True)
+    
+    USERNAME_FIELD = "username"   # important change
+    REQUIRED_FIELDS = []  #
     
     ROLE_CHOICES = [
         ("TEACHER", "Teacher"),
@@ -83,7 +84,7 @@ class Staff(models.Model):
     )
     name = models.CharField(max_length=100, null=True, blank=True)
     email = models.EmailField(unique=True, null=True, blank=True)
-    phone_number = models.CharField(max_length=15, null=True, blank=True)
+    mobile = models.CharField(max_length=15, null=True, blank=True)
     category = models.CharField(
         max_length=20, choices=STAFF_CATEGORIES, default="OTHER"
     )
@@ -256,7 +257,9 @@ class Student(models.Model):
     school = models.ForeignKey(
         School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
     )
-
+    temp_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name="temp_students"
+    )
     form = models.ForeignKey("AdmissionForm", on_delete=models.CASCADE)
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True
