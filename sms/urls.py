@@ -106,6 +106,7 @@ router.register(r'get-announcements', GetAnnouncementView, basename='get-announc
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('health/', health_check, name='health_check'),
     path('api/',include(router.urls)),
     path('api/access/',CustomLoginView.as_view()),  
         

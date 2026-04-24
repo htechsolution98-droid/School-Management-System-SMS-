@@ -73,7 +73,10 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
+from django.http import JsonResponse
 
+def health_check(request):
+    return JsonResponse({"status": "ok"})
 # Create your views here.
 # set access and refresh token in cookie
 class CustomLoginView(TokenObtainPairView):
