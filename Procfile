@@ -1,1 +1,1 @@
-web: gunicorn sms.wsgia
+web: gunicorn sms.wsgi
