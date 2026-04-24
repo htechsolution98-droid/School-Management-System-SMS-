@@ -1,8 +1,10 @@
-from urllib import response
+from os import link
+from urllib import request, response
 
+from django.http import JsonResponse
 from django.shortcuts import render
 from requests import get
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -26,7 +28,7 @@ from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.response import Response
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from django.db.models import Q
 
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -62,6 +64,14 @@ from rest_framework import status
 # from .serializers import DocumentS
 
 from django.core.cache import cache
+
+import pandas as pd
+from datetime import datetime
+from django.contrib.auth import get_user_model
+
+# from yourapp.models import Student, SchoolClass, School
+
+User = get_user_model()
 
 
 # Create your views here.
@@ -150,11 +160,12 @@ def generate_staff_username(name):
 
 # ======END CODE for GENERATE ID & CODE =====
 
+
 def generate_username(email=None, mobile=None, otp=None):
     if email:
-        base = email.split("@")[0][:4]   # first 4 chars
+        base = email.split("@")[0][:4]  # first 4 chars
     else:
-        base = mobile[-4:]              # last 4 digits of mobile
+        base = mobile[-4:]  # last 4 digits of mobile
 
     otp_part = otp[-3:] if otp else str(random.randint(100, 999))
 
@@ -162,17 +173,21 @@ def generate_username(email=None, mobile=None, otp=None):
 
     # Ensure uniqueness
     while User.objects.filter(username=username).exists():
-        random_suffix = ''.join(random.choices(string.digits, k=3))
+        random_suffix = "".join(random.choices(string.digits, k=3))
         username = f"{base}{random_suffix}"
 
     return username
 
-#========= TO GENERATE OTP=========
+
+# ========= TO GENERATE OTP=========
 def generate_otp():
     return str(random.randint(100000, 999999))
+
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+
 # from .serializers import SendOTPSerializer, VerifyOTPSerializer
 from .models import OTP
 import random
@@ -181,15 +196,12 @@ from django.core.mail import send_mail
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
+
 def send_otp_email(email, otp, user_name=None):
     subject = "Your OTP Code"
-    
+
     html_content = render_to_string(
-        "otp_email.html",
-        {
-            "otp": otp,
-            "user_name": user_name
-        }
+        "otp_email.html", {"otp": otp, "user_name": user_name}
     )
 
     email_message = EmailMultiAlternatives(
@@ -202,6 +214,7 @@ def send_otp_email(email, otp, user_name=None):
     email_message.attach_alternative(html_content, "text/html")
     email_message.send()
 
+
 class SendOTPView(APIView):
     def post(self, request):
         serializer = SendOTPSerializer(data=request.data)
@@ -210,31 +223,53 @@ class SendOTPView(APIView):
         email = serializer.validated_data.get("email")
         mobile = serializer.validated_data.get("mobile")
 
+        if not email and not mobile:
+            return Response(
+                {"error": "Provide email or mobile"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if email and mobile:
+            return Response(
+                {"error": "Just User email or mobile"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if email:
+            if User.objects.filter(email=email).exists():
+                return Response(
+                    {"error": "User with this email already exists"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if mobile:
+            if User.objects.filter(mobile=mobile).exists():
+                return Response(
+                    {"error": "User with this mobile already exists"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         otp = str(random.randint(100000, 999999))
 
         OTP.objects.create(
-            email=email if email else None,
-            mobile=mobile if mobile else None,
-            otp=otp
+            email=email if email else None, mobile=mobile if mobile else None, otp=otp
         )
-        if email:
-            send_otp_email(
-                email=email,
-                otp=otp
-            
-            )
         # if email:
-            # send_mail(
-            #     subject="Your OTP Code",
-            #     message=f"Your OTP is {otp}. It is valid for 5 minutes.",
-            #     from_email=",
-            #     recipient_list=[email],
-            # )
+        #     send_otp_email(
+        #         email=email,
+        #         otp=otp
 
-        return Response({
-            "message": "OTP sent successfully",
-            "otp": otp  # ⚠️ remove in production
-        })
+        #     )
+        # if email:
+        # send_mail(
+        #     subject="Your OTP Code",
+        #     message=f"Your OTP is {otp}. It is valid for 5 minutes.",
+        #     from_email=",
+        #     recipient_list=[email],
+        # )
+
+        return Response(
+            {"message": "OTP sent successfully", "otp": otp}  # ⚠️ remove in production
+        )
 
 
 class VerifyOTPView(APIView):
@@ -244,15 +279,19 @@ class VerifyOTPView(APIView):
 
         user = serializer.save()
 
-        return Response({
-            "message": "User registered successfully",
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "message": "User registered successfully",
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
+
 
 class LoginView(APIView):
 
@@ -268,11 +307,15 @@ class LoginView(APIView):
         # 👥 Roles from Groups
         roles = list(user.groups.values_list("name", flat=True))
 
-        return Response({
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-            "roles": roles
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "roles": roles,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 # =========PERMISSIONS===========
 class Is_super_admin(BasePermission):
@@ -300,6 +343,14 @@ class IsCLerk(BasePermission):
             and request.user.is_authenticated
             and request.user.groups.filter(name="CLERK").exists()
         )
+        
+class IsFeeManager(BasePermission):
+    def has_permission(self, request, view):
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.groups.filter(name="FEE MANAGEMENT").exists()
+        )
 
 
 class Isprincipal(BasePermission):
@@ -318,7 +369,8 @@ class Isstudent(BasePermission):
             and request.user.is_authenticated
             and request.user.groups.filter(name="student").exists()
         )
-        
+
+
 class IsTempUser(BasePermission):
     def has_permission(self, request, view):
         return (
@@ -363,12 +415,12 @@ class SchoolView(ModelViewSet):
     def perform_create(self, serializer):
         name = serializer.validated_data.get("name")
         email = serializer.validated_data.get("email")
-        
+
         school_code = generate_school_code(name)
-        
+
         if User.objects.filter(username=school_code).exists():
             school_code = generate_school_code(name)
-            
+
         if not email:
             raise serializers.ValidationError("Provide email for school admin user")
 
@@ -425,11 +477,13 @@ class StaffView(ModelViewSet):
             cache.set(cache_key, staff_qs, timeout=60 * 60 * 5)  # 5 hours cache
 
         return staff_qs
-    
+
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
-        return Response({"message": "Staff created successfully"}, status=status.HTTP_201_CREATED)  
-    
+        return Response(
+            {"message": "Staff created successfully"}, status=status.HTTP_201_CREATED
+        )
+
     # 🔹 Create staff + clear cache
     def perform_create(self, serializer):
         name = serializer.validated_data.get("name")
@@ -438,7 +492,7 @@ class StaffView(ModelViewSet):
         mobile = serializer.validated_data.get("mobile")
 
         if not email and not mobile:
-            raise serializers.ValidationError("Provide email or mobile for staff user") 
+            raise serializers.ValidationError("Provide email or mobile for staff user")
 
         group, created = Group.objects.get_or_create(name=category)
 
@@ -554,13 +608,15 @@ class StudentSignUpView(ModelViewSet):
 
 #         return queryset
 
-class TempUserGetAdmissionDataView(ModelViewSet):
-    queryset = Student.objects.all()    
-    serializer_class = TempUserGetAdmissionDataSerializer
-    permission_classes = [IsAuthenticated, IsTempUser]  
+
+class TempUserAdmissionViewSet(ReadOnlyModelViewSet):
+    serializer_class = TempUserAdmissionDataSerializer
 
     def get_queryset(self):
-        return Student.objects.filter(user=self.request.user)
+        return Admission.objects.filter(
+            temp_user=self.request.user
+        )
+
 
 class StudentFIllView(ModelViewSet):
     queryset = Student.objects.all()
@@ -568,9 +624,17 @@ class StudentFIllView(ModelViewSet):
 
 
 class ClerkVerifyView(ModelViewSet):
-    queryset = Student.objects.all()
-    serializer_class = ClerkVerifySerializr
-
+    queryset = Admission.objects.all()
+    serializer_class = ClerkVerifySerializer
+    permission_classes = [IsAuthenticated, IsFeeManager]
+    lookup_field = "admission_number"
+    
+    def get_queryset(self):
+        return Admission.objects.filter(school = self.request.user.school)
+    
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        return Response({"message": "Clerk updated successfully"}, status=status.HTTP_200_OK)
 
 class PrincipleVerifyView(ModelViewSet):
     queryset = Student.objects.all()
@@ -580,15 +644,16 @@ class PrincipleVerifyView(ModelViewSet):
         return Student.objects.filter(clerk_verified=True)
 
 
+# ======Fee Verify View =============
 class FeeVerifyView(ModelViewSet):
-    queryset = Student.objects.all()
-    serializer_class = FeesVerifySerializr
-
-    # def get_queryset(self):
-    #     return Student.objects.filter(
-    #         Q(clerk_verified=True) & Q(principle_verified=True)
-    #     )
-
+    queryset = Admission.objects.all()
+    serializer_class = FeesVerifySerializer
+    permission_classes = [IsAuthenticated, IsFeeManager]
+    lookup_field = "admission_number"
+    
+    def get_queryset(self):
+        return Admission.objects.filter(school = self.request.user.school)
+# =================================
 
 # =====serializer for School class=====
 # this for only get its public use on Admission fprosecc
@@ -687,6 +752,9 @@ class AdmissionFormViewSet(ModelViewSet):
     lookup_field = "unique_link"
     # access form via UUID
 
+    def get_serializer_class(self):
+        return AdmissionFormSerializer
+
     def get_queryset(self):
         return AdmissionForm.objects.filter(school=self.request.user.school)
 
@@ -694,12 +762,20 @@ class AdmissionFormViewSet(ModelViewSet):
         serializer.save(school=self.request.user.school)
         print(self.request.user)
 
-    # def create(self, request, *args, **kwargs):
-    #     serializer = super().create(request, *args, **kwargs)
+    def create(self, request, *args, **kwargs):
+        with transaction.atomic():
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            instance = serializer.save()
 
-    #     return Response({
-    #         "meassage":"Form created Successfully"
-    #         }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "message": "Form created successfully",
+                
+            },
+            status=status.HTTP_201_CREATED,
+            # headers=headers,
+        )
 
 
 # ====this view set for view admission form field====
@@ -707,6 +783,7 @@ class AdmissionFormViewSet(ModelViewSet):
 
 class FormFieldViewSet(RetrieveAPIView):
     queryset = AdmissionForm.objects.all()
+    permission_classes = [IsAuthenticated, IsTempUser]
     serializer_class = AdmissionFormViewSerializer
     lookup_field = "unique_link"
 
@@ -731,11 +808,13 @@ class FormStatus(ModelViewSet):
             # If setting this form to active
             if is_active is True or is_active == "true":
                 # Make all other forms inactive
-                AdmissionForm.objects.exclude(id=instance.id).filter(school=user.school).update(is_active=False)
+                AdmissionForm.objects.exclude(id=instance.id).filter(
+                    school=user.school
+                ).update(is_active=False)
 
             # Update current instance
             serializer = self.get_serializer(instance, data=request.data, partial=True)
-            
+
             serializer.is_valid(raise_exception=True)
             serializer.save()
 
@@ -746,7 +825,6 @@ class FormStatus(ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
-
 
 
 # for send form link
@@ -764,32 +842,35 @@ from django.urls import reverse
 
 FRONTEND_LOGIN_URL = "https://edunet-one.vercel.app/login"
 
-def Admission(request, unique_link):
+
+def Admission_link(request, unique_link):
     form = AdmissionForm.objects.filter(unique_link=unique_link).first()
 
     if not form:
-        return render(request, "error.html", {
-            "message": "Invalid admission link"
-        })
+        return render(request, "error.html", {"message": "Invalid admission link"})
 
     # ❌ Block if inactive
     if not form.is_active:
-        return render(request, "error.html", {
-            "message": "Admission form is closed"
-        })
+        return render(request, "error.html", {"message": "Admission form is closed"})
 
     # 🔒 Redirect to frontend login
     if not request.user.is_authenticated:
         return redirect(f"{FRONTEND_LOGIN_URL}?next=/admission/{unique_link}")
 
-    return render(request, "index.html", {
-        "unique_link": unique_link
-    })
+    return render(request, "index.html", {"unique_link": unique_link})
+
 
 class FormSubmissionViewSet(ModelViewSet):
-    queryset = Student.objects.all()
-    serializer_class = [IsTempUser]
-    serializer_class = FormSubmissionSerializer
+    queryset = Admission.objects.all()
+    permission_classes = [IsTempUser]
+    serializer_class = AdmissionSubmissionSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     # def get_serializer_class(self):
     #     if self.action in ['list', 'retrieve']:
@@ -801,9 +882,10 @@ class FormSubmissionViewSet(ModelViewSet):
 
 
 class DocumentSubmissionView(ModelViewSet):
-    queryset = DocumentFile.objects.all()
-    serializer_class = DocumentSubmissionSerialiser
+    queryset = AdmissionDocument.objects.all()
+    serializer_class = AdmissionDocumentSubmissionSerializer
     parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [IsTempUser]
 
     def create(self, request, *args, **kwargs):
         data = request.data  # .copy()
@@ -812,20 +894,22 @@ class DocumentSubmissionView(ModelViewSet):
         i = 0
 
         while True:
-            label = data.get(f"documents[{i}][label]")
-            document = data.get(f"documents[{i}][document]")
+            document_field = data.get(f"documents[{i}][document_field]")
+            file = data.get(f"documents[{i}][file]")
 
-            if not label and not document:
+            if not document_field and not file:
                 break
 
-            documents.append({"label": label, "document": document})
+            documents.append(
+                {
+                    "document_field": document_field,
+                    "file": file,
+                }
+            )
             i += 1
 
-        # ✅ Build new clean dict (important)
         final_data = {
-            "form_id": data.get("form_id"),
-            "school": data.get("school"),
-            "student": data.get("student"),
+            "admission_number": data.get("admission_number"),
             "documents": documents,
         }
 
@@ -836,15 +920,42 @@ class DocumentSubmissionView(ModelViewSet):
         return Response(
             {
                 "message": "Documents uploaded successfully",
-                "student_id": data.get("student"),
+                "admission_number": data.get("admission_number"),
             }
         )
 
+# -=============================update submited data by clerk ===================
+class AdmissionUpdateViewSet(ModelViewSet):
+    queryset = Admission.objects.all()
+    lookup_field = "admission_number"
+    permission_classes = [IsAuthenticated, IsFeeManager]
+    def get_queryset(self):
+        return Admission.objects.filter(school=self.request.user.school)
 
-class FormSubmissionReadView(ModelViewSet):
-    queryset = Student.objects.all()
-    serializer_class = FormSubmissionReadSerializer
+    def get_serializer_class(self):
+        # if self.action in ["update", "partial_update"]:
+        return AdmissionUpdateSerializer
+        # return admissionViewSerializer
+# ==================================================================================
+# class FormSubmissionReadView(ModelViewSet):
+#     queryset = Student.objects.all()
+#     serializer_class = FormSubmissionReadSerializer
 
+
+#  =========update document by clerk after submission=====
+
+class AdmissionDocumentViewSet(ModelViewSet):
+    queryset = Admission.objects.all()
+    lookup_field = "admission_number"
+
+    def get_queryset(self):
+        return Admission.objects.filter(school=self.request.user.school)
+
+    def get_serializer_class(self):
+        if self.action in ["update", "partial_update"]:
+            return AdmissionDocumentUpdateSerializer
+        return AdmissionDocumentSerializer
+# ======================================================
 
 class CheckMobileAPIView(APIView):
     def post(self, request):
@@ -893,16 +1004,15 @@ from sms_app.razorpay_client import client
 from rest_framework.views import APIView
 
 
-
-
 class RazorpayOrderView(APIView):
     def post(self, request):
         amount = int(request.data.get("amount")) * 100
-        student_id = request.data.get("student_id")
-        form_id = request.data.get("form_id")
+        admission_number = request.data.get("admission_number")
+        # form_id = request.data.get("form_id")
 
         admission_fee = AdmissionFee.objects.create(
             amount=amount / 100,
+            admission_number=admission_number,
         )
 
         razor_order = client.order.create(
@@ -916,8 +1026,7 @@ class RazorpayOrderView(APIView):
                 "id": razor_order["id"],  # ✅ FIXED
                 "key": settings.RAZOR_PAY_KEY_ID,  # ✅ FIXED
                 "amount": razor_order["amount"],
-                "student_id": student_id,
-                "form_id": form_id,
+                "admission_number": admission_number,
             }
         )
 
@@ -933,18 +1042,18 @@ class VerifyPaymentView(APIView):
         order_id = data.get("razorpay_order_id")
         payment_id = data.get("razorpay_payment_id")
         signature = data.get("razorpay_signature")
-        form_id = data.get("form_id")
-        student_id = data.get("student_id")
-        
-        student_id = int(student_id)  # Convert to integer if it's a string
-        student = Student.objects.filter(id =student_id).first()
-        
-        if student.details_done:
-            return Response({"error": "Payment process are already done"}, status=400)
-    
-        print("RAZORPAY_ORDER_ID", order_id)
-        print("RAZORPAY_PAYMENT_ID", payment_id)
-        print("RAZORPAY_SIGNATURE", signature)
+
+        admission_number = data.get("admission_number")
+        # Convert to integer if it's a string
+        # student = Student.objects.filter(id =student_id).first()
+
+        # if student.details_done:
+        #     return Response({"error": "Payment process are already done"}, status=400)
+
+        # print("RAZORPAY_ORDER_ID", order_id)
+        # print("RAZORPAY_PAYMENT_ID", payment_id)
+        # print("RAZORPAY_SIGNATURE", signature)
+
         if not all([order_id, payment_id, signature]):
             return Response({"error": "Missing payment parameters"}, status=400)
 
@@ -963,28 +1072,28 @@ class VerifyPaymentView(APIView):
         except AdmissionFee.DoesNotExist:
             return Response({"error": "Order not found"}, status=404)
 
-        form_data = AdmissionForm.objects.filter(id=form_id).first()
-        if not form_data:
-            return Response({"error": "Form not found"}, status=404)
+        # form_data = AdmissionForm.objects.filter(id=form_id).first()
+        # if not form_data:
+        #     return Response({"error": "Form not found"}, status=404)
 
-        student = Student.objects.filter(id=student_id).first()
-        if not student:
-            return Response({"error": "Student not found"}, status=404)
+        # student = Student.objects.filter(id=student_id).first()
+        # if not student:
+        #     return Response({"error": "Student not found"}, status=404)
 
-        if student.details_done:
-            return Response({"error": "Payment process are already done"}, status=404)
+        # if student.details_done:
+        #     return Response({"error": "Payment process are already done"}, status=404)
 
         with transaction.atomic():
             payment.razorpay_payment_id = payment_id
             payment.razorpay_signature = signature
-            payment.student = student
-            payment.school = form_data.school  # ✅ correct
+            # payment.student = student
+            payment.school = request.user.school  # ✅ correct
             payment.payment_mode = "online"
             payment.paid_at = timezone.now()
             payment.save()
 
-            student.details_done = True
-            student.save()
+            # student.details_done = True
+            # student.save()
 
         return Response({"status": "success"})
 
@@ -1020,8 +1129,9 @@ class OffilinePaymentView(APIView):
 
             student.details_done = True
             student.save()
-            
+
         return Response({"status": "success"})
+
 
 def get_receipt(request, student_id, form_id):
 
@@ -1474,12 +1584,12 @@ class SyllabusView(ModelViewSet):
 class AssignClassView(ModelViewSet):
     queryset = AssignClass.objects.all()
     serializer_class = AssignClassSerializer
-    permission_classes = [IsAuthenticated, IsCLerk] 
-    
+    permission_classes = [IsAuthenticated, IsCLerk]
+
     def get_queryset(self):
-        
-        return AssignClass.objects.filter(school=self.request.user.school) 
-    
+
+        return AssignClass.objects.filter(school=self.request.user.school)
+
 
 # ========= TIME TABLE VIEWs============
 
@@ -1728,19 +1838,17 @@ class GetRemainingLeaveView(APIView):
         return Response(serializer.data)
 
 
-
 class AnnouncementView(ModelViewSet):
     queryset = Announcement.objects.all()
     serializer_class = AnnouncementSerializer
     permission_classes = [IsAuthenticated, Isprincipal]
 
 
-
 class GetAnnouncementView(ModelViewSet):
     queryset = Announcement.objects.all()
     serializer_class = GetAnnouncementSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         user = self.request.user
         now = timezone.now()
@@ -1748,37 +1856,230 @@ class GetAnnouncementView(ModelViewSet):
         print(user.id)
         print(type(user.id))
         # Base filter (active announcements)
-        base_filter = Q(
-            school=user.school,
-            publish_at__lte=now
-        ) & (Q(expires_at__gte=now) | Q(expires_at__isnull=True))
+        base_filter = Q(school=user.school, publish_at__lte=now) & (
+            Q(expires_at__gte=now) | Q(expires_at__isnull=True)
+        )
 
         # 1️⃣ ALL users
         # all_filter = Q(targets__target_type='ALL')
 
         # 2️⃣ SPECIFIC user
-        specific_filter = Q(
-            targets__target_type='SPECIFIC',
-            targets__target_id=user.id
-        )
+        specific_filter = Q(targets__target_type="SPECIFIC", targets__target_id=user.id)
 
         # 3️⃣ ROLE-based
-        user_groups = user.groups.values_list('id', flat=True)
+        user_groups = user.groups.values_list("id", flat=True)
         print(user_groups)
-        role_filter = Q(
-            targets__target_type='ROLE',
-            targets__target_id__in=user_groups
-        )
+        role_filter = Q(targets__target_type="ROLE", targets__target_id__in=user_groups)
 
         # 4️⃣ CLASS-based (only if student)
         class_filter = Q()
         if hasattr(user, "student"):
             class_filter = Q(
-                targets__target_type='CLASS',
-                targets__target_id=user.student.school_class_id
+                targets__target_type="CLASS",
+                targets__target_id=user.student.school_class_id,
             )
 
         # Combine everything
-        queryset = Announcement.objects.filter(specific_filter   | base_filter  ).order_by('-created_at')
+        queryset = Announcement.objects.filter(specific_filter | base_filter).order_by(
+            "-created_at"
+        )
 
         return queryset
+
+    # def school_wise_report(request, school_id):
+    #     # Example: Get all students in the school
+    #     # school = School.objects.filter(name=school_id)
+    #     if school_id == 1:
+    #         school = "madhuram"
+    #     elif school_id == 2:
+    #         school = "saraswati"
+
+    #     # Example: Get all announcements for the school
+
+    #     # Build your report data
+
+    #     return render(request,"map.html", context={'school': school})
+
+
+import pandas as pd
+from django.db import transaction
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+
+# from yourapp.models import Student, SchoolClass, School
+# from yourapp.permissions import IsCLerk
+
+
+# ----------------------------
+# Helpers
+# ----------------------------
+def parse_date(value):
+    try:
+        return pd.to_datetime(value).date() if pd.notna(value) else None
+    except Exception:
+        return None
+
+
+def clean(value):
+    return value if pd.notna(value) else None
+
+
+# ----------------------------
+# Column Mapping (Excel → Model)
+# ----------------------------
+COLUMN_MAPPING = {
+    "GR No": "gr_no",  # ✅ add this
+    "Surname": "surname",
+    "Student Name": "name",
+    "Father's Name": "father_name",
+    "Mother's Name": "mother_name",
+    "Religion": "raligion_with_Scheduled_Caste",
+    "Place of Birth": "place_of_birth",
+    "Date of Birth": "date_of_birth",
+    "Admission Date": "admission_date",
+    "Leaving Date": "leaving_date",
+    "Last School Attended": "last_school",
+    "Progress": "progress",
+    "Conduct": "conduct",
+    "Remarks": "remarks",
+    "Mobile": "mobile",
+    "Class": "school_class",
+}
+
+
+# ----------------------------
+# Main Import Function
+# ----------------------------
+@transaction.atomic
+def import_students_from_excel(file, school_id, use_bulk=True):
+    df = pd.read_excel(file)
+    df.columns = df.columns.str.strip()
+
+    school = School.objects.get(id=school_id)
+
+    students = []
+    errors = []
+
+    # ✅ Track duplicates inside Excel
+    excel_gr_set = set()
+
+    # ✅ Fetch existing GR numbers from DB
+    existing_gr_nos = set(
+        Student.objects.filter(school=school).values_list("gr_no", flat=True)
+    )
+
+    for index, row in df.iterrows():
+        try:
+            data = {}
+            for excel_col, model_field in COLUMN_MAPPING.items():
+                data[model_field] = clean(row.get(excel_col))
+
+            gr_no = str(data.get("gr_no")).strip() if data.get("gr_no") else None
+
+            # ----------------------------
+            # 🔴 GR NO VALIDATION
+            # ----------------------------
+            if not gr_no:
+                errors.append(f"Row {index+2}: GR No is required")
+                continue
+
+            if gr_no in excel_gr_set:
+                errors.append(f"Row {index+2}: Duplicate GR No '{gr_no}' in Excel")
+                continue
+
+            if gr_no in existing_gr_nos:
+                errors.append(f"Row {index+2}: GR No '{gr_no}' already exists")
+                continue
+
+            excel_gr_set.add(gr_no)
+
+            # ----------------------------
+            # Class validation
+            # ----------------------------
+            school_class = None
+            if data.get("school_class"):
+                class_name = str(data["school_class"]).strip()
+
+                school_class = SchoolClass.objects.filter(
+                    name=class_name, school=school
+                ).first()
+
+                if not school_class:
+                    errors.append(f"Row {index+2}: Class '{class_name}' not found")
+                    continue
+
+            # ----------------------------
+            # Create Student
+            # ----------------------------
+            student = Student(
+                school=school,
+                gr_no=gr_no,  # ✅ important
+                surname=data["surname"],
+                name=data["name"],
+                father_name=data["father_name"],
+                mother_name=data["mother_name"],
+                raligion_with_Scheduled_Caste=data["raligion_with_Scheduled_Caste"],
+                place_of_birth=data["place_of_birth"],
+                date_of_birth=parse_date(data["date_of_birth"]),
+                admission_date=parse_date(data["admission_date"]),
+                leaving_date=parse_date(data["leaving_date"]),
+                last_school=data["last_school"],
+                progress=data["progress"],
+                conduct=data["conduct"],
+                school_class=school_class,
+                remarks=data["remarks"],
+                mobile=data["mobile"],
+            )
+
+            students.append(student)
+
+        except Exception as e:
+            errors.append(f"Row {index+2}: {str(e)}")
+
+    # ----------------------------
+    # 🚨 STOP if any error
+    # ----------------------------
+    if errors:
+        # ❌ rollback automatically due to atomic
+        return {"created": 0, "errors": errors}
+
+    # ----------------------------
+    # Save to DB
+    # ----------------------------
+    if use_bulk:
+        Student.objects.bulk_create(students)
+    else:
+        for s in students:
+            s.save()
+
+    return {"created": len(students), "errors": []}
+
+
+# ----------------------------
+# API View
+# ----------------------------
+
+
+class upload_students(APIView):
+    permission_classes = [IsAuthenticated, IsCLerk]
+
+    def post(self, request):
+        if "file" not in request.FILES:
+            return Response({"error": "No file uploaded"}, status=400)
+
+        excel_file = request.FILES["file"]
+
+        result = import_students_from_excel(
+            file=excel_file,
+            school_id=request.user.school.id,
+            use_bulk=True,  # change to False for debugging
+        )
+
+        return Response(
+            {
+                "message": "Upload completed",
+                "created": result["created"],
+                "errors": result["errors"],
+            }
+        )

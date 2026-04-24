@@ -1,8 +1,12 @@
+# from xxlimited import new
+
 from django.db import models
 import uuid
 from django.contrib.auth.models import AbstractUser
+from django.utils.text import slugify
 
 from django.conf import settings
+
 
 class OTP(models.Model):
     email = models.EmailField(null=True, blank=True)
@@ -11,8 +15,18 @@ class OTP(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+def generate_unique_slug(model, field_value):
+    base_slug = slugify(field_value)
+    slug = base_slug
+    counter = 1
 
-    
+    while model.objects.filter(slug=slug).exists():
+        slug = f"{base_slug}-{counter}"
+        counter += 1
+
+    return slug
+
+
 class School(models.Model):
 
     login_id = models.ForeignKey(
@@ -21,6 +35,7 @@ class School(models.Model):
 
     name = models.CharField(max_length=255, null=True, blank=True)
     code = models.CharField(max_length=50, null=True, blank=True)
+    slug = models.SlugField(max_length=255, null=True, blank=True, unique=True)
 
     email = models.EmailField(null=True, blank=True)
     phone = models.CharField(max_length=15, null=True, blank=True)
@@ -38,18 +53,28 @@ class School(models.Model):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        print("Name:", self.name)
+        print("Slug before:", self.slug)
+
+        if not self.slug and self.name:
+            self.slug = generate_unique_slug(School, self.name)
+
+        print("Slug after:", self.slug)
+
+        super().save(*args, **kwargs)
 
 class CustomUser(AbstractUser):
     school = models.ForeignKey(
         School, on_delete=models.CASCADE, null=True, blank=True, related_name="users"
     )
-    
-    email = models.EmailField(unique=True, null=True, blank=True)
+
+    email = models.EmailField(null=True, blank=True)
     mobile = models.CharField(max_length=15, unique=True, null=True, blank=True)
-    
-    USERNAME_FIELD = "username"   # important change
+
+    USERNAME_FIELD = "username"  # important change
     REQUIRED_FIELDS = []  #
-    
+
     ROLE_CHOICES = [
         ("TEACHER", "Teacher"),
         ("CLERK", "Clerk"),
@@ -59,7 +84,7 @@ class CustomUser(AbstractUser):
         ("TRANSOPORTATION", "Transportation "),
         ("INVENTORY", "Inventory "),
     ]
-    
+
     role = models.CharField(max_length=50, choices=ROLE_CHOICES, blank=True, null=True)
 
 
@@ -187,6 +212,52 @@ class AdmissionForm(models.Model):
         return f"{self.title} - {self.school.name}"
 
 
+# ======newww addd======
+class Admission(models.Model):
+
+    STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    )
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE)
+
+    form = models.ForeignKey(
+        AdmissionForm, on_delete=models.SET_NULL, null=True, blank=True
+    )
+
+    temp_user = models.ForeignKey(  # ✅ IMPORTANT
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="admissions",
+    )
+    admission_number = models.CharField(
+        max_length=50, unique=True, null=True, blank=True
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    fee_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+
+    fee_verified = models.BooleanField(default=False)
+
+    fee_verified_at = models.DateTimeField(null=True, blank=True)
+
+    fee_verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="verified_fees",
+    )
+
+
 class AdmissionFeeStructure(models.Model):
 
     school = models.ForeignKey(
@@ -247,44 +318,149 @@ class FormField(models.Model):
     is_required = models.BooleanField(default=False)
     options = models.JSONField(blank=True, null=True)
     order = models.PositiveIntegerField()
+    # existing
+    map_to_student_field = models.CharField(max_length=100, null=True, blank=True)
+
+    # ✅ NEW
+    is_system_field = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.label} ({self.field_type})"
 
 
+# # ======newww addd======
+class AdmissionFieldValue(models.Model):
+
+    admission = models.ForeignKey(
+        Admission, on_delete=models.CASCADE, related_name="field_values"
+    )
+
+    field = models.ForeignKey(FormField, on_delete=models.CASCADE)
+
+    value = models.TextField(blank=True, null=True)
+
+
+# # ======newww addd======
+class DocumentField(models.Model):
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE)
+
+    form = models.ForeignKey(
+        AdmissionForm, on_delete=models.CASCADE, related_name="document_fields"
+    )
+
+    label = models.CharField(max_length=255)
+
+    is_required = models.BooleanField(default=False)
+
+    order = models.PositiveIntegerField(default=0)
+
+
+# # ======newww addd======
+class AdmissionDocument(models.Model):
+
+    admission = models.ForeignKey(
+        Admission, on_delete=models.CASCADE, related_name="documents"
+    )
+
+    document_field = models.ForeignKey(DocumentField, on_delete=models.CASCADE)
+
+    file = models.FileField(upload_to="admission_documents/")
+
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+
+# # ======this is modified======
 class Student(models.Model):
 
-    school = models.ForeignKey(
-        School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
-    )
-    temp_user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name="temp_students"
-    )
-    form = models.ForeignKey("AdmissionForm", on_delete=models.CASCADE)
+    school = models.ForeignKey(School, on_delete=models.PROTECT, db_index=True)
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True
     )
-    mobile = models.CharField(max_length=12, null=True, blank=True)
 
+    admission = models.OneToOneField(  # 🔥 VERY IMPORTANT
+        "Admission", on_delete=models.SET_NULL, null=True, blank=True
+    )
+
+    # Identity
+    surname = models.CharField(max_length=100, blank=True, null=True)
+    name = models.CharField(max_length=100, blank=True, null=True)
+    father_name = models.CharField(max_length=100, blank=True, null=True)
+    mother_name = models.CharField(max_length=100, blank=True, null=True)
+
+    date_of_birth = models.DateField(blank=True, null=True)
+    mobile = models.CharField(max_length=12, blank=True, null=True)
+
+    # Academic placement
     school_class = models.ForeignKey(
         SchoolClass, on_delete=models.CASCADE, null=True, blank=True
     )
     division = models.CharField(max_length=20, null=True, blank=True)
 
-    is_active = models.BooleanField(default=False)
+    admission_date = models.DateField(blank=True, null=True)
+    gr_no = models.CharField(max_length=100, blank=True, null=True)
+
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    details_done = models.BooleanField(default=False)
 
-    principle_verified = models.BooleanField(default=False)
-    fees_verified = models.BooleanField(default=False)
-    clerk_verified = models.BooleanField(default=False)
+# # ======newww addd======
+# class StudentStatus(models.Model):
 
-    principle_verified_at = models.DateTimeField(null=True, blank=True)
-    clerk_verified_at = models.DateTimeField(null=True, blank=True)
-    fees_verified_at = models.DateTimeField(null=True, blank=True)
+#     STATUS_CHOICES = (
+#         ("active", "Active"),
+#         ("left", "Left"),
+#         ("transferred", "Transferred"),
+#     )
 
-    gr_no = models.CharField(max_length=100, default=None, blank=True, null=True)
+#     student = models.OneToOneField(
+#         Student,
+#         on_delete=models.CASCADE,
+#         related_name="status"
+#     )
+
+#     status = models.CharField(
+#         max_length=20,
+#         choices=STATUS_CHOICES,
+#         default="active"
+#     )
+
+#     leaving_date = models.DateField(null=True, blank=True)
+#     leaving_reason = models.TextField(null=True, blank=True)
+
+# # ======newww addd======
+# class AdmissionVerification(models.Model):
+
+#     admission = models.OneToOneField(
+#         Admission,
+#         on_delete=models.CASCADE,
+#         related_name="verification"
+#     )
+
+#     principle_verified = models.BooleanField(default=False)
+#     clerk_verified = models.BooleanField(default=False)
+#     fees_verified = models.BooleanField(default=False)
+
+#     principle_verified_at = models.DateTimeField(null=True, blank=True)
+#     clerk_verified_at = models.DateTimeField(null=True, blank=True)
+#     fees_verified_at = models.DateTimeField(null=True, blank=True)
+# class StudentDocument(models.Model):
+
+#     student = models.ForeignKey(
+#         Student,
+#         on_delete=models.CASCADE,
+#         related_name="documents"
+#     )
+
+#     document_field = models.ForeignKey(
+#         DocumentField,
+#         on_delete=models.CASCADE
+#     )
+
+#     file = models.FileField(upload_to="student_documents/")
+
+#     uploaded_at = models.DateTimeField(auto_now_add=True)
 
 
 class Perents(models.Model):
@@ -317,29 +493,29 @@ class StudentFieldValue(models.Model):
         return f"{self.student} - {self.field.label}"
 
 
-class DocumentField(models.Model):
-    form_id = models.ForeignKey(
-        "AdmissionForm",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="label",
-    )
+# class DocumentField(models.Model):
+#     form_id = models.ForeignKey(
+#         "AdmissionForm",
+#         on_delete=models.CASCADE,
+#         null=True,
+#         blank=True,
+#         related_name="label",
+#     )
 
-    school = models.ForeignKey(
-        "School",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="document_fields",  # changed
-    )
+#     school = models.ForeignKey(
+#         "School",
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True,
+#         related_name="document_fields",  # changed
+#     )
 
-    label = models.CharField(max_length=255, null=True, blank=True)
+#     label = models.CharField(max_length=255, null=True, blank=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+#     created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return self.label if self.label else "Student Document"
+#     def __str__(self):
+#         return self.label if self.label else "Student Document"
 
 
 class DocumentFile(models.Model):
@@ -414,9 +590,8 @@ class AdmissionFee(models.Model):
     school = models.ForeignKey(
         School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
     )
-    student = models.ForeignKey(
-        Student, on_delete=models.CASCADE, related_name="fee", null=True, blank=True
-    )
+
+    admission_number = models.CharField(max_length=100, null=True, blank=True)
 
     amount = models.IntegerField()
     currency = models.CharField(max_length=10, default="INR")
@@ -528,15 +703,20 @@ class Time_table(models.Model):
     def __str__(self):
         return f"{self.year} - {self.day} - {self.class_div} - {self.slot}"
 
+
 class AttendanceTimeRule(models.Model):
-    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
+    )
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
     half_day_time = models.TimeField(null=True, blank=True)
-    
-    
+
+
 class AttendanceLocation(models.Model):
-    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
+    )
     latitude = models.DecimalField(max_digits=9, decimal_places=6)
     longitude = models.DecimalField(max_digits=9, decimal_places=6)
     radius = models.DecimalField(max_digits=10, decimal_places=2)
@@ -609,7 +789,11 @@ class LeavePerDay(models.Model):
     )
 
     leave = models.ForeignKey(
-        LeaveRequest, on_delete=models.CASCADE, null=True, blank=True, related_name="leave_days"
+        LeaveRequest,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="leave_days",
     )
     date = models.DateField(null=True, blank=True)
 
@@ -620,7 +804,9 @@ class LeavePerDay(models.Model):
         ("CANCELLED", "Cancelled"),
     ]
 
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING", null=True, blank=True)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="PENDING", null=True, blank=True
+    )
     approved_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
@@ -642,32 +828,32 @@ class StaffRemainingLeave(models.Model):
         return f"{self.staff} - {self.leave_template}"
 
 
-
-
-
 class Announcement(models.Model):
-    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
+    )
     title = models.CharField(max_length=255)
     description = models.TextField()
 
-    publish_at = models.DateTimeField()   # when it becomes visible
+    publish_at = models.DateTimeField()  # when it becomes visible
     expires_at = models.DateTimeField(null=True, blank=True)  # optional
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+
 class AnnouncementTarget(models.Model):
-    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True, db_index=True)  
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
+    )
     TARGET_TYPE = [
-        ('ALL', 'All'),
-        ('ROLE', 'Role'),
-        ('CLASS', 'Class'),
-        ('SPECIFIC', 'Specific User'),
+        ("ALL", "All"),
+        ("ROLE", "Role"),
+        ("CLASS", "Class"),
+        ("SPECIFIC", "Specific User"),
     ]
 
     announcement = models.ForeignKey(
-        Announcement,
-        on_delete=models.CASCADE,
-        related_name='targets'
+        Announcement, on_delete=models.CASCADE, related_name="targets"
     )
 
     target_type = models.CharField(max_length=10, choices=TARGET_TYPE)

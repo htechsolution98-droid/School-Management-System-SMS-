@@ -63,11 +63,14 @@ router.register(r'formstatus', FormStatus, basename='formstatus')# For Principle
 router.register(r'submissions', FormSubmissionViewSet, basename='submissions')# admission form fill fields METHOD [POST]  ----API Need---  api/schoolclass/ for class drop down
 router.register(r'documentsubmission', DocumentSubmissionView, basename='documentsubmission')# admission form fill fields METHOD [POST]  ----API Need---  api/schoolclass/ for class drop down
 
-router.register(r'gettempuserdata', TempUserGetAdmissionDataView, basename='gettempuserdata')# For student to check admission status METHOD [GET]  api/admissionstatus/<int:student_id>/
+router.register(r'updatesubmition', AdmissionUpdateViewSet, basename='updatesubmition')# For student to check admission status METHOD [GET]  api/admissionstatus/<int:student_id>/ 
+router.register(r'updateDocument', AdmissionDocumentViewSet, basename='updateDocument')
+
+router.register(r'gettempuserdata', TempUserAdmissionViewSet, basename='gettempuserdata')# For student to check admission status METHOD [GET]  api/admissionstatus/<int:student_id>/
+ 
  
 #===== set only use get this api====== 
-router.register(r'StudentDataview', FormSubmissionReadView, basename='StudentDataview') # Not in use
-
+# router.register(r'StudentDataview', FormSubmissionReadView, basename='StudentDataview') # Not in use
 
 
 # =====verify api===== after admission sudmission
@@ -113,6 +116,7 @@ urlpatterns = [
     
     
     path('api/api-login/', LoginView.as_view()),
+    # path('school/<int:school_id>/', school_wise_report, name='school_wise_report'),
     path('api/send-otp/', SendOTPView.as_view()),
     path('api/verify-otp/', VerifyOTPView.as_view()),
     
@@ -120,7 +124,7 @@ urlpatterns = [
     
     path('api/fields/<str:unique_link>/', FormFieldViewSet.as_view()),
     
-     path('api/admission/<str:unique_link>/',Admission),
+     path('api/admission/<str:unique_link>/',Admission_link),
      path('api/admission/form/link/',ShareFormLink), #to get active form link for admission form fill up
      path('api/checkmobile/',CheckMobileAPIView.as_view()),
      
@@ -139,6 +143,7 @@ urlpatterns = [
     # path('log/',TemplateView.as_view(template_name='login.html')),
     
     # path('in/',TemplateView.as_view(template_name='index.html')),
+    path('api/import-students/',upload_students.as_view()),
    
     
     path('api/razor/order/',RazorpayOrderView.as_view()),
