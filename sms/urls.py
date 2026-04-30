@@ -42,13 +42,15 @@ schema_view = get_schema_view(
 
 
 router = DefaultRouter()
+router.register(r'feature',FeatureView,basename='feature')
+router.register(r'schoolfeature',SchoolFeatureView, basename='schoolfeature')
+router.register(r'getfeature',GetFeatureView, basename='getfeature')
 
 router.register(r'SchoolView',SchoolView, basename='SchoolView') # DONE
 router.register(r'StaffView',StaffView, basename='StaffView') # DONE
-router.register(r'studentSignUp',StudentSignUpView, basename='studentSignUp') # On Changing
+# router.register(r'studentSignUp',StudentSignUpView, basename='studentSignUp') # On Changing
 
 # both api use togather when student form fill
-router.register(r'StudentFIllView', StudentFIllView, basename='StudentFIllView') #  Not in use
 
 # =========ADMISSIONS PROCESS ROUTER========
 
@@ -56,28 +58,39 @@ router.register(r'schoolclass', SchoolClassView, basename='schoolclass')  #only 
 router.register(r'getclass', ClassView, basename='getclass')  #For Admission Form class Drop Down METHOD [GET]
 
 # ===== api for admission  proccess =====
-router.register(r'forms', AdmissionFormViewSet, basename='forms')# For Principle use TO create admission form METHOD [POST] 
-router.register(r'formstatus', FormStatus, basename='formstatus')# For Principle use TO create admission form METHOD [POST] 
 
-# router.register(r'fields', FormFieldViewSet, basename='fields') #to retrive fields of admission form that added by principle
-router.register(r'submissions', FormSubmissionViewSet, basename='submissions')# admission form fill fields METHOD [POST]  ----API Need---  api/schoolclass/ for class drop down
-router.register(r'documentsubmission', DocumentSubmissionView, basename='documentsubmission')# admission form fill fields METHOD [POST]  ----API Need---  api/schoolclass/ for class drop down
+# PRINCIPLE CREATE ADMISSION FORM  [POST] Fapi-01
+router.register(r'forms', AdmissionFormViewSet, basename='forms')
 
-router.register(r'updatesubmition', AdmissionUpdateViewSet, basename='updatesubmition')# For student to check admission status METHOD [GET]  api/admissionstatus/<int:student_id>/ 
+#  PRINCIPLE PUBLIC UNPUBLIC FORM [POST] Fapi-02
+router.register(r'formstatus', FormStatus, basename='formstatus')
+
+# ADMISSION FORM FILL FIELDS SFapi-01
+router.register(r'submissions', FormSubmissionViewSet, basename='submissions')
+# ADMISSION FORM FILL DOCUMENT FIELDS Fapi-02
+router.register(r'documentsubmission', DocumentSubmissionView, basename='documentsubmission')
+
+# TEMP USER GET ADMISSION DATA TUapi-01
+router.register(r'gettempuserdata', TempUserAdmissionViewSet, basename='gettempuserdata')
+
+
+#GET SUBMITED DATA
+router.register(r'admissionview', AdmissionReadOnlyViewSet, basename='admissionview')
+#UPDATE FIELD VALUE BY CLARK
+router.register(r'updatesubmition', AdmissionUpdateViewSet, basename='updatesubmition')
+#UPDATE DOCUMENT VALUE BY CLARK
 router.register(r'updateDocument', AdmissionDocumentViewSet, basename='updateDocument')
 
-router.register(r'gettempuserdata', TempUserAdmissionViewSet, basename='gettempuserdata')# For student to check admission status METHOD [GET]  api/admissionstatus/<int:student_id>/
- 
- 
-#===== set only use get this api====== 
-# router.register(r'StudentDataview', FormSubmissionReadView, basename='StudentDataview') # Not in use
 
+#AFTER ADMISSION SUDMISSION
 
-# =====verify api===== after admission sudmission
-router.register(r'clerk_doc_fields_check', ClerkVerifyView, basename='ClerkVerifyView') # For solve submission details METHOD [GET,PUT]
+# =================VERIFY API================= 
+# Add GR Number --create student -create perents -create student,perent user
+router.register(r'clerk_verify', ClerkVerifyView, basename='ClerkVerifyView') 
 
-router.register(r'PrincipleVerifyView', PrincipleVerifyView, basename='PrincipleVerifyView') # ask
-router.register(r'fee_verify', FeeVerifyView, basename='fee_verify')# ask
+router.register(r'PrincipleVerifyView', PrincipleVerifyView, basename='PrincipleVerifyView')
+
+router.register(r'fee_verify', FeeVerifyView, basename='fee_verify')
 
 router.register(r'setSubject', SetSubjectView, basename='setSubject')# For CLerk add subject METHOD [GET,POST,PUT,DELETE]  ----API Need---  api/schoolclass/ for class drop down
 router.register(r'divisionSet', SetDivisionView, basename='divisionSet') #For Clerk Use METHOD [GET,POST,PUT,DELETE] ----API Need---  api/schoolclass/ for class drop down
@@ -103,6 +116,7 @@ router.register(r'change-leave-status', ChangeLeaveView, basename='change-leave-
 router.register(r'announcements', AnnouncementView, basename='announcements')# For managing announcements
 router.register(r'get-announcements', GetAnnouncementView, basename='get-announcements')# For get announcement for student,staff with filter [school filter add remainig]   
 
+router.register(r'feetype', FeeTypeViewSet, basename='feetype')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -123,9 +137,11 @@ urlpatterns = [
     
     path('api/set-slot/', SetSlotView),
     
-    path('api/fields/<str:unique_link>/', FormFieldViewSet.as_view()),
+    # GET PUBLIC FROM DATA Fapi-03
+    path('api/fields/', FormFieldViewSet.as_view()),
     
-     path('api/admission/<str:unique_link>/',Admission_link),
+     path('api/admission/<uuid:unique_link>/',Admission_link.as_view()),#THIS API JUSR RETURN SCHOOL PERAMETER ###-----DONE
+     
      path('api/admission/form/link/',ShareFormLink), #to get active form link for admission form fill up
      path('api/checkmobile/',CheckMobileAPIView.as_view()),
      

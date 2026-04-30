@@ -1,3 +1,11 @@
+
+
+from rest_framework.permissions import BasePermission
+from .models import UserModuleAccess
+
+from sms_app.razorpay_client import client
+from rest_framework.views import APIView
+
 from os import link
 from urllib import request, response
 
@@ -75,8 +83,11 @@ User = get_user_model()
 
 from django.http import JsonResponse
 
+
 def health_check(request):
     return JsonResponse({"status": "ok"})
+
+
 # Create your views here.
 # set access and refresh token in cookie
 class CustomLoginView(TokenObtainPairView):
@@ -346,7 +357,8 @@ class IsCLerk(BasePermission):
             and request.user.is_authenticated
             and request.user.groups.filter(name="CLERK").exists()
         )
-        
+
+
 class IsFeeManager(BasePermission):
     def has_permission(self, request, view):
         return (
@@ -383,10 +395,63 @@ class IsTempUser(BasePermission):
         )
 
 
+class HasModuleAccess(BasePermission):
+    """ 
+    Allows access if user is mapped to module
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+
+        if not user or not user.is_authenticated:
+            return False
+
+        if not user.is_active:
+            return False
+
+        if user.is_superuser:
+            return True
+
+        module_code = getattr(view, "module_code", None)
+
+        if not module_code:
+            raise AttributeError("module_code is required in the view")
+
+        return UserModuleAccess.objects.filter(
+            user=user,
+            module__code=module_code,
+            module__is_active=True
+        ).exists()
+
+
+class FeatureView(ModelViewSet):
+    queryset = Feature.objects.all()
+    serializer_class = FeatureSerialzer
+    permission_classes = [IsAuthenticated,Is_super_admin]
+    
+    
+class SchoolFeatureView(ModelViewSet):
+    queryset = SchoolFeature.objects.all()
+    serializer_class = SchoolFeatureSerializer
+    # permission_classes = [IsAuthenticated,Is_super_admin]
+    
+    
+class GetFeatureView(ModelViewSet):
+    queryset = SchoolFeature.objects.all()
+    serializer_class = GetFeatureSerializer
+    permission_classes = [IsAuthenticated,Is_admin_trustee]
+
+    http_method_names = ["get"]
+
+    def get_queryset(self):
+        school = self.request.user.school
+        return SchoolFeature.objects.filter(school = school,is_enabled = True)
+        
 class SchoolView(ModelViewSet):
     queryset = School.objects.all()
     serializer_class = SchoolSerializer
     permission_classes = [IsAuthenticated]
+    # module_code = "STUDENT"
 
     # 🔹 Get schools with cache
     def get_queryset(self):
@@ -506,6 +571,7 @@ class StaffView(ModelViewSet):
         user.role = category
         user.email = email if email else None
         user.mobile = mobile if mobile else None
+        
         user.set_password("123456")
         user.save()
 
@@ -538,14 +604,6 @@ class GetTeacherView(ModelViewSet):
     def get_queryset(self):
         school = self.request.user.school
         return Staff.objects.filter(school=school, user__groups__name="TEACHER")
-
-
-class StudentSignUpView(ModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = StudentSignUpSerliazer
-
-    http_method_names = ["post"]
-
 
 # =============TO ask more=========
 
@@ -616,28 +674,39 @@ class TempUserAdmissionViewSet(ReadOnlyModelViewSet):
     serializer_class = TempUserAdmissionDataSerializer
 
     def get_queryset(self):
-        return Admission.objects.filter(
-            temp_user=self.request.user
+        return Admission.objects.filter(temp_user=self.request.user)
+
+# ----------TO GET ADMISSION DATA TO TRUSTEE----------------
+class AdmissionReadOnlyViewSet(ReadOnlyModelViewSet):
+    serializer_class = GetAdmissionDataSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        # Multi-tenant safety (VERY IMPORTANT for your SaaS)
+        return Admission.objects.filter(school=user.school).prefetch_related(
+            "field_values",
+            "documents"
         )
-
-
-class StudentFIllView(ModelViewSet):
-    queryset = Student.objects.all()
-    serializer_class = StudentFIllSerilaizer
-
+        
+# ==========================================================
 
 class ClerkVerifyView(ModelViewSet):
     queryset = Admission.objects.all()
     serializer_class = ClerkVerifySerializer
     permission_classes = [IsAuthenticated, IsFeeManager]
     lookup_field = "admission_number"
-    
+
     def get_queryset(self):
-        return Admission.objects.filter(school = self.request.user.school)
-    
+        return Admission.objects.filter(school=self.request.user.school)
+
     def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)
-        return Response({"message": "Clerk updated successfully"}, status=status.HTTP_200_OK)
+        return Response(
+            {"message": "Clerk updated successfully"}, status=status.HTTP_200_OK
+        )
+
 
 class PrincipleVerifyView(ModelViewSet):
     queryset = Student.objects.all()
@@ -653,10 +722,13 @@ class FeeVerifyView(ModelViewSet):
     serializer_class = FeesVerifySerializer
     permission_classes = [IsAuthenticated, IsFeeManager]
     lookup_field = "admission_number"
-    
+
     def get_queryset(self):
-        return Admission.objects.filter(school = self.request.user.school)
+        return Admission.objects.filter(school=self.request.user.school)
+
+
 # =================================
+
 
 # =====serializer for School class=====
 # this for only get its public use on Admission fprosecc
@@ -750,7 +822,7 @@ class SchoolClassView(ModelViewSet):
 class AdmissionFormViewSet(ModelViewSet):
     queryset = AdmissionForm.objects.all()
     serializer_class = AdmissionFormSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, Isprincipal]
 
     lookup_field = "unique_link"
     # access form via UUID
@@ -774,7 +846,6 @@ class AdmissionFormViewSet(ModelViewSet):
         return Response(
             {
                 "message": "Form created successfully",
-                
             },
             status=status.HTTP_201_CREATED,
             # headers=headers,
@@ -785,13 +856,18 @@ class AdmissionFormViewSet(ModelViewSet):
 
 
 class FormFieldViewSet(RetrieveAPIView):
-    queryset = AdmissionForm.objects.all()
-    permission_classes = [IsAuthenticated, IsTempUser]
     serializer_class = AdmissionFormViewSerializer
-    lookup_field = "unique_link"
+    permission_classes = [IsAuthenticated, IsTempUser]
 
     def get_queryset(self):
-        return AdmissionForm.objects.filter(is_active=True)
+        school = self.request.user.school
+
+        # Only active forms, read-only single record
+        return AdmissionForm.objects.filter(school=school, is_active=True)
+
+    def get_object(self):
+        # Return only one active record (first one)
+        return self.get_queryset().first()
 
 
 # ===================================================
@@ -846,21 +922,33 @@ from django.urls import reverse
 FRONTEND_LOGIN_URL = "https://edunet-one.vercel.app/login"
 
 
-def Admission_link(request, unique_link):
-    form = AdmissionForm.objects.filter(unique_link=unique_link).first()
+class Admission_link(APIView):
+    def get(self, request, unique_link):
+        # Find form by unique_link
+        form = AdmissionForm.objects.filter(unique_link=unique_link).first()
 
-    if not form:
-        return render(request, "error.html", {"message": "Invalid admission link"})
+        # Invalid link
+        if not form:
+            return Response(
+                {"message": "Invalid admission link"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-    # ❌ Block if inactive
-    if not form.is_active:
-        return render(request, "error.html", {"message": "Admission form is closed"})
+        # Block if form is inactive
+        if not form.is_active:
+            return Response(
+                {"message": "Admission form is closed"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    # 🔒 Redirect to frontend login
-    if not request.user.is_authenticated:
-        return redirect(f"{FRONTEND_LOGIN_URL}?next=/admission/{unique_link}")
-
-    return render(request, "index.html", {"unique_link": unique_link})
+        # Return school details
+        return Response(
+            {
+                "school_id": form.school.id,   # use .id not object
+                "school_slug": form.school.slug
+            },
+            status=status.HTTP_200_OK
+        )
 
 
 class FormSubmissionViewSet(ModelViewSet):
@@ -895,7 +983,7 @@ class DocumentSubmissionView(ModelViewSet):
 
         documents = []
         i = 0
-
+        
         while True:
             document_field = data.get(f"documents[{i}][document_field]")
             file = data.get(f"documents[{i}][file]")
@@ -915,6 +1003,7 @@ class DocumentSubmissionView(ModelViewSet):
             "admission_number": data.get("admission_number"),
             "documents": documents,
         }
+        
 
         serializer = self.get_serializer(data=final_data)
         serializer.is_valid(raise_exception=True)
@@ -927,11 +1016,14 @@ class DocumentSubmissionView(ModelViewSet):
             }
         )
 
-# -=============================update submited data by clerk ===================
+
+# ==================UPDATE SUBMITED DATA BY CLERK===================
 class AdmissionUpdateViewSet(ModelViewSet):
     queryset = Admission.objects.all()
+    serializer_class = AdmissionUpdateSerializer
     lookup_field = "admission_number"
     permission_classes = [IsAuthenticated, IsFeeManager]
+
     def get_queryset(self):
         return Admission.objects.filter(school=self.request.user.school)
 
@@ -939,6 +1031,8 @@ class AdmissionUpdateViewSet(ModelViewSet):
         # if self.action in ["update", "partial_update"]:
         return AdmissionUpdateSerializer
         # return admissionViewSerializer
+
+
 # ==================================================================================
 # class FormSubmissionReadView(ModelViewSet):
 #     queryset = Student.objects.all()
@@ -946,6 +1040,7 @@ class AdmissionUpdateViewSet(ModelViewSet):
 
 
 #  =========update document by clerk after submission=====
+
 
 class AdmissionDocumentViewSet(ModelViewSet):
     queryset = Admission.objects.all()
@@ -958,7 +1053,10 @@ class AdmissionDocumentViewSet(ModelViewSet):
         if self.action in ["update", "partial_update"]:
             return AdmissionDocumentUpdateSerializer
         return AdmissionDocumentSerializer
+
+
 # ======================================================
+
 
 class CheckMobileAPIView(APIView):
     def post(self, request):
@@ -1003,8 +1101,6 @@ class CheckMobileAPIView(APIView):
         )
 
 
-from sms_app.razorpay_client import client
-from rest_framework.views import APIView
 
 
 class RazorpayOrderView(APIView):
@@ -2086,3 +2182,20 @@ class upload_students(APIView):
                 "errors": result["errors"],
             }
         )
+
+
+
+# ============FEE MANAGEMENT VIEW==============
+
+
+class FeeTypeViewSet(ModelViewSet):
+    queryset = FeeType.objects.all()
+    serializer_class = FeeTypeSerializer
+    permission_classes = [IsAuthenticated, IsFeeManager]
+    
+    def get_queryset(self):
+        return FeeType.objects.filter(school =  self.request.user.school)
+    
+    def perform_create(self, serializer):
+        school =  self.request.user.school
+        serializer.save(school=school)

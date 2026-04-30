@@ -64,6 +64,61 @@ class School(models.Model):
 
         super().save(*args, **kwargs)
 
+
+# -----------SCHOLL FEATURE---------
+class Feature(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
+# --------ADD SCHOOL FEATURE---------
+class SchoolFeature(models.Model):
+    school = models.ForeignKey("School", on_delete=models.CASCADE)
+    feature = models.ForeignKey(Feature, on_delete=models.CASCADE)
+    is_enabled = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ("school", "feature")
+
+
+# ------------MODUL LIST------------
+class Module(models.Model):
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=50, unique=True)  # e.g. STUDENT, FEES
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "module"
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+# -------------USER ACCESS MODUL--------
+class UserModuleAccess(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="module_access"
+    )
+    module = models.ForeignKey(
+        Module, on_delete=models.CASCADE, related_name="user_access"
+    )
+
+    class Meta:
+        db_table = "user_module_access"
+        unique_together = ("user", "module")  # prevents duplicate entries
+        indexes = [
+            models.Index(fields=["user"]),
+            models.Index(fields=["module"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user} -> {self.module.code}"
+
+
 class CustomUser(AbstractUser):
     school = models.ForeignKey(
         School, on_delete=models.CASCADE, null=True, blank=True, related_name="users"
@@ -75,17 +130,17 @@ class CustomUser(AbstractUser):
     USERNAME_FIELD = "username"  # important change
     REQUIRED_FIELDS = []  #
 
-    ROLE_CHOICES = [
-        ("TEACHER", "Teacher"),
-        ("CLERK", "Clerk"),
-        ("LIBRARIAN", "Librarian"),
-        ("FEE MANAGEMENT", "Fee Management "),
-        ("PRINCIPAL", "Principal"),
-        ("TRANSOPORTATION", "Transportation "),
-        ("INVENTORY", "Inventory "),
-    ]
+    # ROLE_CHOICES = [
+    #     ("TEACHER", "Teacher"),
+    #     ("CLERK", "Clerk"),
+    #     ("LIBRARIAN", "Librarian"),
+    #     ("FEE MANAGEMENT", "Fee Management "),
+    #     ("PRINCIPAL", "Principal"),
+    #     ("TRANSOPORTATION", "Transportation "),
+    #     ("INVENTORY", "Inventory "),
+    # ]
 
-    role = models.CharField(max_length=50, choices=ROLE_CHOICES, blank=True, null=True)
+    role = models.CharField(max_length=100, blank=True, null=True)
 
 
 class Staff(models.Model):
@@ -94,15 +149,15 @@ class Staff(models.Model):
         School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
     )
 
-    STAFF_CATEGORIES = [
-        ("TEACHER", "Teacher"),
-        ("CLERK", "Clerk"),
-        ("LIBRARIAN", "Librarian"),
-        ("FEE MANAGEMENT", "Fee Management "),
-        ("PRINCIPAL", "Principal"),
-        ("TRANSOPORTATION", "Transportation "),
-        ("INVENTORY", "Inventory "),
-    ]
+    # STAFF_CATEGORIES = [
+    #     ("TEACHER", "Teacher"),
+    #     ("CLERK", "Clerk"),
+    #     ("LIBRARIAN", "Librarian"),
+    #     ("FEE MANAGEMENT", "Fee Management "),
+    #     ("PRINCIPAL", "Principal"),
+    #     ("TRANSOPORTATION", "Transportation "),
+    #     ("INVENTORY", "Inventory "),
+    # ]
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True
@@ -110,9 +165,8 @@ class Staff(models.Model):
     name = models.CharField(max_length=100, null=True, blank=True)
     email = models.EmailField(unique=True, null=True, blank=True)
     mobile = models.CharField(max_length=15, null=True, blank=True)
-    category = models.CharField(
-        max_length=20, choices=STAFF_CATEGORIES, default="OTHER"
-    )
+
+    category = models.CharField(max_length=20, default="OTHER")
 
     address = models.TextField(null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
@@ -358,6 +412,8 @@ class DocumentField(models.Model):
 
 # # ======newww addd======
 class AdmissionDocument(models.Model):
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True)
 
     admission = models.ForeignKey(
         Admission, on_delete=models.CASCADE, related_name="documents"
@@ -858,3 +914,108 @@ class AnnouncementTarget(models.Model):
 
     target_type = models.CharField(max_length=10, choices=TARGET_TYPE)
     target_id = models.IntegerField(null=True, blank=True)
+
+
+# =============FEE MANAGEMENT TABLE=================
+class AcademicYear(models.Model):
+    name = models.CharField(max_length=20)  # 2025-26
+    school = models.ForeignKey(School, on_delete=models.CASCADE)
+
+
+class FeeType(models.Model):
+    BILLING_CHOICES = [
+        ("single", "Single"),
+        ("monthly", "Monthly"),
+        ("quarterly", "Quarterly"),
+        ("half_yearly", "Half-Yearly"),
+        ("yearly", "Yearly"),
+    ]
+    name = models.CharField(max_length=100,null=True, blank=True)  # Tuition, Transport, Exam
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True)
+    billing_cycle = models.CharField(max_length=20, choices=BILLING_CHOICES, null=True, blank=True)
+
+
+class FeeWiseClass(models.Model):
+    school = models.ForeignKey(School, on_delete=models.CASCADE,null=True, blank=True)
+    school_class = models.ForeignKey(SchoolClass, on_delete=models.CASCADE,null=True, blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2,null=True, blank=True)
+
+
+    
+class FeeStructure(models.Model):
+    
+    FEE_SCOPE = [
+        ("class", "Class Wise"),
+        ("global", "All Students"),
+    ]
+    
+    BILLING_CHOICES = [
+        ("single", "Single"),
+        ("monthly", "Monthly"),
+        ("quarterly", "Quarterly"),
+        ("half_yearly", "Half-Yearly"),
+        ("yearly", "Yearly"),
+    ]
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE,null=True, blank=True)
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE,null=True, blank=True)
+
+    fee_type = models.ForeignKey(FeeType, on_delete=models.CASCADE,null=True, blank=True)
+
+    amount = models.DecimalField(max_digits=10, decimal_places=2,null=True, blank=True)
+
+    billing_cycle = models.CharField(max_length=20, choices=BILLING_CHOICES,null=True, blank=True)
+    scope = models.CharField(max_length=20, choices=FEE_SCOPE,null=True, blank=True)
+
+    start_date = models.DateField()
+
+
+class StudentFee(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    fee_structure = models.ForeignKey(FeeStructure, on_delete=models.CASCADE)
+
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    assigned_date = models.DateField(auto_now_add=True)
+
+
+class FeeInstallment(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("partial", "Partial"),
+        ("paid", "Paid"),
+        ("overdue", "Overdue"),
+    ]
+
+    student_fee = models.ForeignKey(
+        StudentFee, on_delete=models.CASCADE, related_name="installments"
+    )
+
+    installment_no = models.IntegerField()
+
+    due_date = models.DateField()  # last date to pay
+
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    paid_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+
+    paid_date = models.DateField(null=True, blank=True)
+
+    late_fee = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+
+
+class FeePayment(models.Model):
+    PAYMENT_MODE = [
+        ("cash", "Cash"),
+        ("online", "Online"),
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    installment = models.ForeignKey(FeeInstallment, on_delete=models.CASCADE)
+
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
+
+    payment_date = models.DateField(auto_now_add=True)
+    payment_mode = models.CharField(max_length=20, choices=PAYMENT_MODE)
+
+    transaction_id = models.CharField(max_length=255, blank=True, null=True)

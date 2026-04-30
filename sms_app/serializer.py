@@ -1,6 +1,13 @@
+from rest_framework import serializers
+from django.db import transaction
+from rest_framework import serializers
+from .models import FormField
+import re
+from rest_framework import serializers
+from django.contrib.auth.hashers import check_password
+from django.utils import timezone
 from datetime import timedelta
 from xml.parsers.expat import model
-
 from rest_framework import serializers
 from .models import *
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -21,10 +28,12 @@ class SendOTPSerializer(serializers.Serializer):
         mobile = data.get("mobile")
 
         if not email and not mobile:
-            raise serializers.ValidationError("Provide email or mobile")
+            raise serializers.ValidationError({"message": "Provide email or mobile"})
 
         if email and mobile:
-            raise serializers.ValidationError("Provide only one (email or mobile)")
+            raise serializers.ValidationError(
+                {"message": "Provide only one (email or mobile)"}
+            )
 
         return data
 
@@ -33,8 +42,7 @@ import random
 
 # from django.contrib.auth.models import User
 from rest_framework import serializers
-
-# from .models import OTP, UserProfile
+from django.db.models import Q
 
 
 class VerifyOTPSerializer(serializers.Serializer):
@@ -42,19 +50,30 @@ class VerifyOTPSerializer(serializers.Serializer):
     mobile = serializers.CharField(required=False)
     otp = serializers.CharField(max_length=6)
     password = serializers.CharField(write_only=True)
+    school_id = serializers.CharField(write_only=True, required=False)
+    school_slug = serializers.CharField(write_only=True, required=False)
 
     def validate(self, data):
         email = data.get("email")
         mobile = data.get("mobile")
         otp = data.get("otp")
+        school_id = data.get("school_id")
+        school_slug = data.get("school_slug")
+
+        print(school_id)
+        print(school_slug)
+        if not school_id or not school_slug:
+            raise serializers.ValidationError(
+                {"message": "Provide school_id or school_slug"}
+            )
 
         if not email and not mobile:
-            raise serializers.ValidationError("Provide email or mobile")
+            raise serializers.ValidationError({"message": "Provide email or mobile"})
 
         if email and mobile:
-            raise serializers.ValidationError("Provide only one")
+            raise serializers.ValidationError({"message": "Provide only one"})
 
-        # 🔍 OTP check (safe filtering)
+        # OTP check (safe filtering)
         query = OTP.objects.filter(otp=otp)
 
         if email:
@@ -75,9 +94,10 @@ class VerifyOTPSerializer(serializers.Serializer):
         mobile = validated_data.get("mobile")
         password = validated_data.get("password")
         otp_obj = validated_data["otp_obj"]
-        slug = validated_data.get("slug")
+        school_id = validated_data.pop("school_id")
+        school_slug = validated_data.pop("school_slug")
 
-        # 🔥 Username generation
+        # Username generation
         if email:
             base_username = email.split("@")[0][:4]
         else:
@@ -90,8 +110,8 @@ class VerifyOTPSerializer(serializers.Serializer):
             username = f"{base_username}{counter}"
             counter += 1
 
-        # 👤 Create USER (ONLY ONE TABLE: customuser)
-        school = School.objects.filter(slug=slug).first() if slug else None
+        # Create USER (ONLY ONE TABLE: customuser)
+        school = School.objects.filter(id=school_id, slug=school_slug).first()
         user = User.objects.create_user(
             username=username,
             email=email,
@@ -100,23 +120,14 @@ class VerifyOTPSerializer(serializers.Serializer):
             school=school,
         )
 
-        # 👥 Assign group (optional)
+        # Assign group (optional)
         group, _ = Group.objects.get_or_create(name="temp_user")
         user.groups.add(group)
 
-        # ❌ Delete OTP after success
+        #  Delete OTP after success
         otp_obj.delete()
 
         return user
-
-
-from rest_framework import serializers
-from django.contrib.auth import get_user_model
-from django.contrib.auth.hashers import check_password
-
-# from .models import UserProfile
-
-User = get_user_model()
 
 
 class LoginSerializer(serializers.Serializer):
@@ -133,17 +144,14 @@ class LoginSerializer(serializers.Serializer):
         mobile = mobile.strip() if mobile else None
 
         if not email and not mobile:
-            raise serializers.ValidationError("Provide email or mobile")
+            raise serializers.ValidationError({"message": "Provide email or mobile"})
 
         if email and mobile:
-            raise serializers.ValidationError("Provide only one")
+            raise serializers.ValidationError({"message": "Provide only one"})
 
         user = None
 
-        print("EMAIL", email)
-        print("USER", user)
-
-        # 🔍 Find user by email
+        #  Find user by email
         user = (
             CustomUser.objects.filter(
                 email=email.lower().strip() if email else None
@@ -152,41 +160,62 @@ class LoginSerializer(serializers.Serializer):
             else CustomUser.objects.filter(mobile=mobile.strip()).first()
         )
 
-        # 🔐 Combined check (important)
+        #  Combined check (important)
+
         if not user or not user.check_password(password):
-            raise serializers.ValidationError("Invalid credentials")
+            raise serializers.ValidationError({"message": "Invalid credentials"})
 
         if not user.is_active:
-            raise serializers.ValidationError("Account disabled")
+            raise serializers.ValidationError({"message": "Account disabled"})
 
         data["user"] = user
         return data
-
-
-def generate_student_username(name):
-    Staff_name = name.split(" ")[0]
-    digit = string.digits
-
-    four_digit = "".join(random.choices(digit, k=4))
-    Staff_username = Staff_name + four_digit
-
-    if User.objects.filter(username=Staff_username).exists():
-        return generate_student_username(name)
-
-    return Staff_username
 
 
 class CustomeLoginSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         data = super().validate(attrs)
-
         user = self.user
 
         role = user.groups.values_list("name", flat=True)
         data["roles"] = list(role)
 
         return data
+
+# ----------FOR ADD FEATURE BY SUPER USER------------
+
+class FeatureSerialzer(serializers.ModelSerializer):
+    class Meta:
+        model = Feature
+        fields = "__all__"
+        
+# -----------FOR SET WHICH FEATURE SCHOOL HAS-----------
+class SchoolFeatureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchoolFeature
+        fields = "__all__"
+        read_only_fields = ["is_enabled"]
+    
+    def validate(self, data):
+        school = data.get("school")
+        feature = data.get("name")
+
+        if SchoolFeature.objects.filter(school=school, feature=feature).exists():
+            raise serializers.ValidationError(
+                {"message": "This Feature already have to this school"}
+            )
+        return data 
+
+# -----------TO GET FEATURE FRO DROP DOWN IN STAFF CREATE---------------
+class GetFeatureSerializer(serializers.ModelSerializer):
+    
+    feature_name = serializers.CharField(source = 'feature.name',read_only = True )
+    
+    class Meta:
+        model = SchoolFeature
+        fields = ['feature_name']
+
 
 
 class SchoolSerializer(serializers.ModelSerializer):
@@ -207,7 +236,7 @@ class StaffSerializer(serializers.ModelSerializer):
         if User.objects.filter(
             email=value
         ).exists():  # for filter use User model not staff model because email is in user model
-            raise serializers.ValidationError("Email is already exists.")
+            raise serializers.ValidationError({"message": "Email is already exists."})
 
         return value
 
@@ -215,7 +244,9 @@ class StaffSerializer(serializers.ModelSerializer):
         if User.objects.filter(
             mobile=value
         ).exists():  # for filter use User model not staff model because mobile is in user model
-            raise serializers.ValidationError("Mobile number is already exists.")
+            raise serializers.ValidationError(
+                {"message": "Mobile number is already exists."}
+            )
 
         return value
 
@@ -226,116 +257,8 @@ class GetTeacherSerializer(serializers.ModelSerializer):
         fields = ["id", "name"]
 
 
-class StudentSignUpSerliazer(serializers.ModelSerializer):
-    name = serializers.CharField(write_only=True)
-    password = serializers.CharField(write_only=True)
-
-    class Meta:
-        model = User
-        fields = ["name", "password"]
-
-    def create(self, validated_data):
-        name = validated_data.pop("name")
-        password = validated_data.pop("password")
-        username = generate_student_username(name)
-
-        u = User(username=username)
-        u.set_password(password)
-        u.save()
-        group, created = Group.objects.get_or_create(name="student")
-        u.groups.add(group)
-
-        return u
-
-
-# class FieldSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Field
-#         fields = ['label', 'field_type']
-#         read_only_fields= ['value']
-
-
-# class FormSerializer(serializers.ModelSerializer):
-#     fields = FieldSerializer(many=True)
-
-#     class Meta:
-#         model = Form
-#         fields = ['id', 'title','email','fields']
-
-
-#     def create(self, validated_data):
-#         fields_data = validated_data.pop('fields')
-
-#         form = Form.objects.create(**validated_data)
-
-#         for field in fields_data:
-#             Field.objects.create(
-#                 form=form,
-#                 label=field['label'],
-#                 field_type=field['field_type']
-#             )
-
-#         return form
-
-
-# class FromFillSeriliazer(serializers.ModelSerializer):
-#     fields = FieldSerializer(many=True,)
-
-#     class Meta:
-#         model = Form
-#         fields = ['id', 'title', 'fields']
-
-
-# # use for add set email and add extra fields for student form
-# class StudentSerializer(serializers.ModelSerializer):
-#     document_fields = serializers.ListField(child=serializers.CharField(),write_only=True)
-
-#     class Meta:
-#         model = Student
-#         fields = ['extra_data','document_fields']
-
-#     def create(self, validated_data):
-#         # to get document_fields
-#         document_fields = validated_data.pop('document_fields', [])
-
-#         student = Student.objects.create(**validated_data)
-
-#         for field in document_fields:
-#             StudentDocument.objects.create(student=student, label=field)
-
-#         return student
-
-
-# class StudentDocumentSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = StudentDocument
-#         fields = '__all__'
-#         read_only_fields = []
-
-
-class StudentFIllSerilaizer(serializers.ModelSerializer):
-
-    class Meta:
-        model = Student
-        fields = "__all__"
-        read_only_fields = [
-            "email",
-            "created_at",
-            "is_active",
-            "form_filled",
-            "principle_verified",
-            "fees_verified",
-            "clerk_verified",
-            "principle_verified_at",
-            "clerk_verified_at",
-            "fees_verified_at",
-            "gr_no",
-        ]
-
-from django.utils import timezone
-
-# ============Fee Verify By Fee Department========
-#1
+# ============FEE VERIFY BY FEE DEPARTMENT========
+# 1
 class AdmissionFieldValueReadSerializer(serializers.ModelSerializer):
     field_label = serializers.CharField(source="field.label", read_only=True)
 
@@ -343,7 +266,8 @@ class AdmissionFieldValueReadSerializer(serializers.ModelSerializer):
         model = AdmissionFieldValue
         fields = ["id", "field", "field_label", "value"]
 
-#2
+
+# 2
 class FeesVerifySerializer(serializers.ModelSerializer):
 
     field_values = AdmissionFieldValueReadSerializer(
@@ -372,7 +296,7 @@ class FeesVerifySerializer(serializers.ModelSerializer):
             "field_values",
         ]
 
-    # ✅ Fee verification should only update an existing admission.
+    #  Fee verification should only update an existing admission.
     def create(self, validated_data):
         raise serializers.ValidationError(
             {
@@ -380,7 +304,7 @@ class FeesVerifySerializer(serializers.ModelSerializer):
             }
         )
 
-    # ✅ Get latest fee
+    #  Get latest fee
     def update(self, instance, validated_data):
 
         request = self.context.get("request")
@@ -392,29 +316,18 @@ class FeesVerifySerializer(serializers.ModelSerializer):
         # instance.status = "verified"
         instance.fee_verified = True
         instance.fee_verified_at = timezone.now()
-        instance.fee_verified_by = request.user if request and hasattr(request, "user") else None
+        instance.fee_verified_by = (
+            request.user if request and hasattr(request, "user") else None
+        )
 
         instance.save()
 
         return instance
+
+
 # =====================================================
 
-# =========admissions process serializers========
-from rest_framework import serializers
-from .models import FormField
-import re
-
-import re
-from rest_framework import serializers
-from .models import SchoolClass
-
-import re
-from rest_framework import serializers
-from .models import SchoolClass
-
-import re
-from rest_framework import serializers
-from .models import SchoolClass
+# =========ADMISSIONS PROCESS SERIALIZERS==========
 
 
 class SchoolClassSerializer(serializers.ModelSerializer):
@@ -432,7 +345,9 @@ class SchoolClassSerializer(serializers.ModelSerializer):
         if SchoolClass.objects.filter(
             school=school, school_class__iexact=school_class
         ).exists():
-            raise serializers.ValidationError(f"{school_class} already exists")
+            raise serializers.ValidationError(
+                {"message": f"{school_class} already exists"}
+            )
 
         return data
 
@@ -447,11 +362,9 @@ class SchoolClassSerializer(serializers.ModelSerializer):
 
 # # ================================================ modified serializers for admission form 23/04/26
 
-from rest_framework import serializers
-from django.db import transaction
 
-# ===================== FormField =====================
-
+# ===================== FORMFIELD =====================
+# 1
 class FormFieldSerializer(serializers.ModelSerializer):
     class Meta:
         model = FormField
@@ -467,8 +380,8 @@ class FormFieldSerializer(serializers.ModelSerializer):
         ]
 
 
-# ===================== FormSection =====================
-
+# ===================== FORMSECTION =====================
+# 2
 class FormSectionSerializer(serializers.ModelSerializer):
     fields = FormFieldSerializer(many=True, required=False)
 
@@ -477,12 +390,10 @@ class FormSectionSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "order", "fields"]
 
 
-# ===================== Fee Structure =====================
-
+# ===================== FEE STRUCTURE =====================
+# 3
 class AdmissionFeeStructureSerializer(serializers.ModelSerializer):
-    class_name = serializers.PrimaryKeyRelatedField(
-        queryset=SchoolClass.objects.all()
-    )
+    class_name = serializers.PrimaryKeyRelatedField(queryset=SchoolClass.objects.all())
 
     class Meta:
         model = AdmissionFeeStructure
@@ -496,7 +407,7 @@ class DocumentFieldSerializer(serializers.ModelSerializer):
 
 
 # ===================== MAIN SERIALIZER =====================
-
+# 4
 class AdmissionFormSerializer(serializers.ModelSerializer):
     sections = FormSectionSerializer(many=True, write_only=True, required=False)
 
@@ -507,9 +418,7 @@ class AdmissionFormSerializer(serializers.ModelSerializer):
     )
 
     fee_structures_input = AdmissionFeeStructureSerializer(
-        many=True,
-        required=False,
-        write_only=True
+        many=True, required=False, write_only=True
     )
 
     class Meta:
@@ -568,39 +477,29 @@ class AdmissionFormSerializer(serializers.ModelSerializer):
                 fields_data = section_data.pop("fields", [])
 
                 section = FormSection.objects.create(
-                    form=form,
-                    school=school,
-                    **section_data
+                    form=form, school=school, **section_data
                 )
 
                 for field_data in fields_data:
                     FormField.objects.create(
-                        section=section,
-                        school=school,
-                        **field_data
+                        section=section, school=school, **field_data
                     )
 
             # ---------------- document fields ----------------
             for label in document_fields:
-                DocumentField.objects.create(
-                    form=form,
-                    school=school,
-                    label=label
-                )
+                DocumentField.objects.create(form=form, school=school, label=label)
 
             # ---------------- fee structures ----------------
             if form.fee_type == "individual":
                 for fee in fee_data:
                     AdmissionFeeStructure.objects.create(
-                        admission_form=form,
-                        school=school,
-                        **fee
+                        admission_form=form, school=school, **fee
                     )
 
             return form
 
 
-# ====this  serializer for view admission form field====
+# ====THIS SERIALIZER FOR VIEW ADMISSION FORM FIELD====
 
 
 class AdmissionFormViewSerializer(serializers.ModelSerializer):
@@ -636,22 +535,29 @@ class ChangeFormStatus(serializers.ModelSerializer):
 
 
 # --------Admission Form submite serializers---------
-# 1
+# 1class
 class AdmissionFieldValueSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdmissionFieldValue
         fields = ["field", "value"]
 
 
-# 2
 class AdmissionSubmissionSerializer(serializers.ModelSerializer):
-
     field_values = AdmissionFieldValueSerializer(many=True, write_only=True)
+
     school_class = serializers.PrimaryKeyRelatedField(
         queryset=SchoolClass.objects.all(),
         required=False,
         write_only=True,
     )
+
+    # allow input also
+    admission_number = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+    )
+
     fee_type = serializers.CharField(read_only=True)
     fee_amount = serializers.IntegerField(read_only=True, allow_null=True)
     payment_status = serializers.CharField(read_only=True)
@@ -671,17 +577,16 @@ class AdmissionSubmissionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
-            "admission_number",
             "fee_type",
             "fee_amount",
             "payment_status",
         ]
 
     def validate(self, data):
-
         form = data["form"]
         field_values = data["field_values"]
         school_class = data.get("school_class")
+        admission_number = data.get("admission_number")
 
         form_fields = {
             field.id: field
@@ -696,49 +601,91 @@ class AdmissionSubmissionSerializer(serializers.ModelSerializer):
             if not valid_field:
                 raise serializers.ValidationError(f"Invalid field: {field_obj}")
 
-            field_obj = valid_field
-
-            if field_obj.is_required and not item.get("value"):
-                raise serializers.ValidationError(f"{field_obj.label} is required")
+            if valid_field.is_required and not item.get("value"):
+                raise serializers.ValidationError(f"{valid_field.label} is required")
 
         resolved_school_class = school_class or self._extract_school_class_from_fields(
             form, field_values
         )
-        if resolved_school_class and resolved_school_class.school_id != data["school"].id:
-            raise serializers.ValidationError("Selected class does not belong to this school")
+
+        if (
+            resolved_school_class
+            and resolved_school_class.school_id != data["school"].id
+        ):
+            raise serializers.ValidationError(
+                "Selected class does not belong to this school"
+            )
+
+        # check existing admission by admission_number
+        existing_admission = None
+        if admission_number not in [None, ""]:
+            existing_admission = Admission.objects.filter(
+                admission_number=admission_number
+            ).first()
+
+
+        if existing_admission:
+            if existing_admission.fee_verified and existing_admission.fee_verified == True:
+                raise serializers.ValidationError(
+                    "Cannot update admission after fee verification"
+                )
 
         data["resolved_school_class"] = resolved_school_class
+        data["existing_admission"] = existing_admission
+
         return data
 
     def create(self, validated_data):
-
         field_values_data = validated_data.pop("field_values")
         school_class = validated_data.pop("school_class", None)
-        resolved_school_class = validated_data.pop("resolved_school_class", None) or school_class
+        resolved_school_class = (
+            validated_data.pop("resolved_school_class", None) or school_class
+        )
+
+        existing_admission = validated_data.pop("existing_admission", None)
 
         form = validated_data["form"]
         school = validated_data["school"]
-
         user = self.context["request"].user
 
         # =====================================================
-        # 🔥 STEP 1: CREATE ADMISSION (MAIN RECORD)
+        # CASE 1: admission_number exists -> UPDATE OLD RECORD
         # =====================================================
+        if existing_admission:
 
-        admission = Admission.objects.create(
-            form=form,
-            school=school,
-            temp_user=user,
-            status="pending"
-        )
+            admission = existing_admission
 
-        admission.admission_number = f"{school.id}-ADM-{admission.id:04d}"
-        admission.save()
+            admission.form = form
+            admission.school = school
+            admission.temp_user = user
+            admission.status = "pending"
+            admission.save()
+
+            # delete old field values
+            admission.field_values.all().delete()
 
         # =====================================================
-        # 🔥 STEP 2: STORE FIELD VALUES (ADMISSION ONLY)
+        # CASE 2: admission_number null/none -> CREATE NEW
         # =====================================================
+        else:
+            admission = Admission.objects.create(
+                form=form,
+                school=school,
+                temp_user=user,
+                status="pending",
+            )
+            school = School.objects.filter(id = school.id).first()
+            
+            first_four = school.name[:4]
+            
+            code = random.randint(1000, 9999)
+            admission_number = f"{school.id}{code}-{first_four}-ADM-{admission.id:04d}"
+            admission.admission_number = admission_number
+            admission.save()
 
+        # =====================================================
+        # STORE FIELD VALUES
+        # =====================================================
         values = []
 
         for item in field_values_data:
@@ -827,24 +774,47 @@ class AdmissionSubmissionSerializer(serializers.ModelSerializer):
 
 
 # ------ Admission form document submittion serializers----------
+
 # 1
 class AdmissionDocumentItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AdmissionDocument
         fields = ["document_field", "file"]
-# 2
 
+
+# 2
 from rest_framework.exceptions import ValidationError
+
 class AdmissionDocumentSubmissionSerializer(serializers.ModelSerializer):
 
     documents = AdmissionDocumentItemSerializer(many=True, write_only=True)
     admission_number = serializers.CharField(write_only=True)
-    
+
     class Meta:
         model = AdmissionDocument
         fields = ["admission_number", "documents"]
+        read_only_fields = ['school']
 
+    def validate(self, data):
+        admission_number = data.get("admission_number")
+
+        if not admission_number:
+            raise serializers.ValidationError(
+                {"message": "Admission number is required"}
+            )
+        
+        temp_user = self.context["request"].user
+
+        admission = Admission.objects.filter(
+            admission_number=admission_number, temp_user=temp_user
+        ).first()
+
+        #  ------------------------------------------------------------work baaki
+        if not admission:
+            raise serializers.ValidationError({"message": "Admission not found"})
+
+        return data
 
     def create(self, validated_data):
 
@@ -852,18 +822,20 @@ class AdmissionDocumentSubmissionSerializer(serializers.ModelSerializer):
 
         admission_number = validated_data.pop("admission_number")
 
-        admission = Admission.objects.get(
-            admission_number=admission_number
-        )
+        temp_user = self.context["request"].user
+
+        admission = Admission.objects.filter(
+            admission_number=admission_number, temp_user=temp_user
+        ).first()
 
         # =========================
         # VALIDATION
         # =========================
 
         if admission.status == "completed":
-            raise serializers.ValidationError({
-                "message": "Admission already completed"
-            })
+            raise serializers.ValidationError(
+                {"message": "Admission already completed"}
+            )
 
         instances = []
 
@@ -889,27 +861,29 @@ class AdmissionDocumentSubmissionSerializer(serializers.ModelSerializer):
         return instances
 
 
-# -=============================update submited data by clerk ===================
+# -=============================UPDATE SUBMITED DATA BY CLERK ===================
 
-#1
+
+# 1
 class FormFieldSimpleSerializer(serializers.ModelSerializer):
     class Meta:
         model = FormField
         fields = ["id", "label"]
-#2
+
+
+# 2
 class AdmissionFieldValueViewSerializer(serializers.ModelSerializer):
     field = FormFieldSimpleSerializer(read_only=True)  # for response
     field_id = serializers.PrimaryKeyRelatedField(
-        queryset=FormField.objects.all(),
-        source="field",
-        write_only=True
+        queryset=FormField.objects.all(), source="field", write_only=True
     )
 
     class Meta:
         model = AdmissionFieldValue
         fields = ["field", "field_id", "value"]
-        
-#3
+
+
+# 3
 class AdmissionUpdateSerializer(serializers.ModelSerializer):
     field_values = AdmissionFieldValueViewSerializer(many=True, required=False)
 
@@ -929,20 +903,23 @@ class AdmissionUpdateSerializer(serializers.ModelSerializer):
         if field_values_data is not None:
             instance.field_values.all().delete()
 
-            AdmissionFieldValue.objects.bulk_create([
-                AdmissionFieldValue(
-                    admission=instance,
-                    field=item["field"],
-                    value=item.get("value")
-                )
-                for item in field_values_data
-            ])
+            AdmissionFieldValue.objects.bulk_create(
+                [
+                    AdmissionFieldValue(
+                        admission=instance, field=item["field"], value=item.get("value")
+                    )
+                    for item in field_values_data
+                ]
+            )
 
         instance.save()
         return instance
+
+
 # ===========================================================================
 
-#  =========update document by clerk after submission=========
+#  =========UPDATE DOCUMENT BY CLERK AFTER SUBMISSION=========
+
 
 class AdmissionDocumentItemSerializer(serializers.ModelSerializer):
     document_field_name = serializers.CharField(
@@ -953,18 +930,20 @@ class AdmissionDocumentItemSerializer(serializers.ModelSerializer):
         model = AdmissionDocument
         fields = ["document_field", "document_field_name", "file"]
 
+
 class AdmissionDocumentSerializer(serializers.ModelSerializer):
     documents = AdmissionDocumentItemSerializer(
-        source="admission_documents",  # related_name
-        many=True
+        source="admission_documents", many=True  # related_name
     )
 
     class Meta:
         model = Admission
         fields = ["admission_number", "documents"]
         read_only_fields = ["admission_number"]
-    
+
+
 from django.db import transaction
+
 
 class AdmissionDocumentUpdateSerializer(serializers.ModelSerializer):
     documents = AdmissionDocumentItemSerializer(many=True)
@@ -977,9 +956,7 @@ class AdmissionDocumentUpdateSerializer(serializers.ModelSerializer):
         documents_data = validated_data.get("documents", [])
 
         if instance.status == "completed":
-            raise ValidationError({
-                "message": "Admission already completed"
-            })
+            raise ValidationError({"message": "Admission already completed"})
 
         with transaction.atomic():
             for doc in documents_data:
@@ -990,11 +967,14 @@ class AdmissionDocumentUpdateSerializer(serializers.ModelSerializer):
                 AdmissionDocument.objects.update_or_create(
                     admission=instance,
                     document_field=document_field,
-                    defaults={"file": file}
+                    defaults={"file": file},
                 )
 
         return instance
+
+
 # ============================================================================
+
 
 # =================get submited data for tem user====================
 class AdmissionFieldValueReadSerializer(serializers.ModelSerializer):
@@ -1009,7 +989,6 @@ class TempUserAdmissionDataSerializer(serializers.ModelSerializer):
     field_values = AdmissionFieldValueReadSerializer(many=True, read_only=True)
 
     # school_class = serializers.SerializerMethodField()
-    
 
     class Meta:
         model = Admission
@@ -1033,6 +1012,8 @@ class TempUserAdmissionDataSerializer(serializers.ModelSerializer):
         return field_value.value if field_value else None
 
     # ✅ Extract division (if mapped)
+
+
 # ============================================================
 
 
@@ -1116,11 +1097,14 @@ class AdmissionFieldValueReadSerializer(serializers.ModelSerializer):
         model = AdmissionFieldValue
         fields = ["id", "field", "field_label", "value"]
 
+
 # =======================
 # Document Serializer
 # =======================
 class AdmissionDocumentReadSerializer(serializers.ModelSerializer):
-    document_label = serializers.CharField(source="document_field.label", read_only=True)
+    document_label = serializers.CharField(
+        source="document_field.label", read_only=True
+    )
 
     class Meta:
         model = AdmissionDocument
@@ -1133,11 +1117,13 @@ class AdmissionDocumentReadSerializer(serializers.ModelSerializer):
 from django.db import transaction
 from django.utils import timezone
 
+
 class ClerkVerifySerializer(serializers.ModelSerializer):
 
     field_values = AdmissionFieldValueReadSerializer(many=True, read_only=True)
     documents = AdmissionDocumentReadSerializer(many=True, read_only=True)
     gr_no = serializers.CharField(write_only=True, required=False)
+
     class Meta:
         model = Admission
         fields = [
@@ -1170,14 +1156,13 @@ class ClerkVerifySerializer(serializers.ModelSerializer):
             # =========================
 
             # Generate GR number
-            # gr_no = f"GR-{instance.id:05d}"
 
             student = Student.objects.create(
-                school = self.context["request"].user.school,
+                school=self.context["request"].user.school,
                 # form=instance.form,
                 # temp_user=instance.temp_user,
                 # division=instance.division,
-                gr_no = gr_no,
+                gr_no=gr_no,
                 # details_done=True,
             )
 
@@ -1199,31 +1184,35 @@ class ClerkVerifySerializer(serializers.ModelSerializer):
             # 4. COPY DYNAMIC FIELDS
             # =========================
 
-            StudentFieldValue.objects.bulk_create([
-                StudentFieldValue(
-                    student=student,
-                    field=fv.field,
-                    value=fv.value,
-                    form_id=instance.form,
-                    school=self.context["request"].user.school,
-                )
-                for fv in instance.field_values.all()
-            ])
+            StudentFieldValue.objects.bulk_create(
+                [
+                    StudentFieldValue(
+                        student=student,
+                        field=fv.field,
+                        value=fv.value,
+                        form_id=instance.form,
+                        school=self.context["request"].user.school,
+                    )
+                    for fv in instance.field_values.all()
+                ]
+            )
 
             # =========================
             # 5. COPY DOCUMENTS
             # =========================
 
-            DocumentFile.objects.bulk_create([
-                DocumentFile(
-                    student=student,
-                    label=doc.document_field,
-                    document=doc.file,
-                    school=self.context["request"].user.school,
-                    form_id=instance.form
-                )
-                for doc in instance.documents.all()
-            ])
+            DocumentFile.objects.bulk_create(
+                [
+                    DocumentFile(
+                        student=student,
+                        label=doc.document_field,
+                        document=doc.file,
+                        school=self.context["request"].user.school,
+                        form_id=instance.form,
+                    )
+                    for doc in instance.documents.all()
+                ]
+            )
 
             # =========================
             # 6. CREATE USER (STUDENT)
@@ -1259,7 +1248,7 @@ class ClerkVerifySerializer(serializers.ModelSerializer):
             Perents.objects.get_or_create(
                 school=self.context["request"].user.school,
                 user=parent_user,
-                perents_of=student
+                perents_of=student,
             )
 
             # =========================
@@ -1329,6 +1318,32 @@ class AssignClassSerializer(serializers.ModelSerializer):
         school = self.context["request"].user.school
         validated_data["school"] = school
         return super().create(validated_data)
+
+# ----------TO GET ADMISSION DATA TO TRUSTEE----------------
+class AdmissionDocumentReadSerializer(serializers.ModelSerializer):
+    document_label = serializers.CharField(
+        source="document_field.label", read_only=True
+    )
+
+    class Meta:
+        model = AdmissionDocument
+        fields = ["id", "document_field", "document_label", "file"]
+        
+class GetAdmissionDataSerializer(serializers.ModelSerializer):
+    field_values = AdmissionFieldValueReadSerializer(many=True, read_only=True)
+    documents = AdmissionDocumentReadSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Admission
+        fields = [
+            "id",
+            "admission_number",
+            "status",
+            # "created_at",   # optional (if exists)
+            "field_values",
+            "documents",
+        ]
+# =============================================================
 
 
 # class Tt_daySerializer(serializers.ModelSerializer):
@@ -2178,3 +2193,15 @@ class GetAnnouncementSerializer(serializers.ModelSerializer):
     class Meta:
         model = Announcement
         fields = ["id", "title", "description", "publish_at", "expires_at", "targets"]
+
+
+
+# =================FEE MANAGEMENT SERIALIZERS====================
+
+class FeeTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FeeType
+        fields = "__all__"
+        read_only_fields = ['school']
+
+
