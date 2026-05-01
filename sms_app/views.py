@@ -430,6 +430,12 @@ class FeatureView(ModelViewSet):
     serializer_class = FeatureSerialzer
     permission_classes = [IsAuthenticated,Is_super_admin]
     
+    http_method_names = ["get" ,"post", "delete"]
+    
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        return Response({"message": "Feature created successfully"}, status=201)
+    
     
 class SchoolFeatureView(ModelViewSet):
     queryset = SchoolFeature.objects.all()
@@ -454,7 +460,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.core.cache import cache
 from rest_framework import serializers
-    
+
 class SchoolView(ModelViewSet):
     queryset = School.objects.all()
     serializer_class = SchoolSerializer
