@@ -435,7 +435,7 @@ class Student(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True
     )
 
-    admission = models.OneToOneField(  # 🔥 VERY IMPORTANT
+    admission = models.OneToOneField(  # VERY IMPORTANT
         "Admission", on_delete=models.SET_NULL, null=True, blank=True
     )
 
@@ -460,6 +460,12 @@ class Student(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+class StudentVerify(models.Model):
+    gr_no = models.CharField(max_length=50)
+    admission_number = models.CharField(max_length=100,null=True, blank=True)
+    student = models.ForeignKey(Student,on_delete=models.CASCADE)
+    clerk_verify = models.BooleanField(default=False)
+    
 
 # # ======newww addd======
 # class StudentStatus(models.Model):
@@ -920,6 +926,41 @@ class AnnouncementTarget(models.Model):
 class AcademicYear(models.Model):
     name = models.CharField(max_length=20)  # 2025-26
     school = models.ForeignKey(School, on_delete=models.CASCADE)
+    start_month = models.PositiveSmallIntegerField(null=True, blank=True)
+    end_month = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    def get_start_year(self):
+        if self.name and len(self.name) >= 4 and self.name[:4].isdigit():
+            return int(self.name[:4])
+        return None
+
+    def get_month_numbers(self):
+        if not self.start_month or not self.end_month:
+            return []
+
+        if self.start_month <= self.end_month:
+            return list(range(self.start_month, self.end_month + 1))
+
+        return list(range(self.start_month, 13)) + list(range(1, self.end_month + 1))
+
+    def get_billing_periods(self):
+        start_year = self.get_start_year()
+        months = self.get_month_numbers()
+
+        if not start_year:
+            return []
+
+        periods = []
+        for month in months:
+            year = start_year
+            if self.start_month and self.start_month > self.end_month and month < self.start_month:
+                year = start_year + 1
+            periods.append(f"{year}-{month:02d}")
+
+        return periods
+
+    def __str__(self):
+        return self.name
 
 
 class FeeType(models.Model):
@@ -930,92 +971,239 @@ class FeeType(models.Model):
         ("half_yearly", "Half-Yearly"),
         ("yearly", "Yearly"),
     ]
-    name = models.CharField(max_length=100,null=True, blank=True)  # Tuition, Transport, Exam
+    name = models.CharField(max_length=100, null=True, blank=True)  # Tuition, Transport, Exam
     school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True)
     billing_cycle = models.CharField(max_length=20, choices=BILLING_CHOICES, null=True, blank=True)
 
+    def __str__(self):
+        return self.name or "Fee Type"
+
 
 class FeeWiseClass(models.Model):
-    school = models.ForeignKey(School, on_delete=models.CASCADE,null=True, blank=True)
-    school_class = models.ForeignKey(SchoolClass, on_delete=models.CASCADE,null=True, blank=True)
-    amount = models.DecimalField(max_digits=10, decimal_places=2,null=True, blank=True)
-
-
-    
-class FeeStructure(models.Model):
-    
-    FEE_SCOPE = [
-        ("class", "Class Wise"),
-        ("global", "All Students"),
-    ]
-    
-    BILLING_CHOICES = [
-        ("single", "Single"),
-        ("monthly", "Monthly"),
-        ("quarterly", "Quarterly"),
-        ("half_yearly", "Half-Yearly"),
-        ("yearly", "Yearly"),
+    LATE_FEE_TYPE_CHOICES = [
+        ("fixed", "Fixed"),
+        ("per_day", "Per Day"),
     ]
 
-    school = models.ForeignKey(School, on_delete=models.CASCADE,null=True, blank=True)
-    academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE,null=True, blank=True)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True)
+    feetype = models.ForeignKey(FeeType, on_delete=models.CASCADE, null=True, blank=True)
+    school_class = models.ForeignKey(SchoolClass, on_delete=models.CASCADE, null=True, blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    late_fee_enabled = models.BooleanField(default=False)
+    grace_days = models.PositiveIntegerField(default=0)
+    late_fee_type = models.CharField(
+        max_length=20, choices=LATE_FEE_TYPE_CHOICES, null=True, blank=True
+    )
+    late_fee_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    max_late_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
-    fee_type = models.ForeignKey(FeeType, on_delete=models.CASCADE,null=True, blank=True)
-
-    amount = models.DecimalField(max_digits=10, decimal_places=2,null=True, blank=True)
-
-    billing_cycle = models.CharField(max_length=20, choices=BILLING_CHOICES,null=True, blank=True)
-    scope = models.CharField(max_length=20, choices=FEE_SCOPE,null=True, blank=True)
-
-    start_date = models.DateField()
+    def __str__(self):
+        return f"{self.feetype} - {self.school_class} - {self.amount}"
 
 
 class StudentFee(models.Model):
-    student = models.ForeignKey(Student, on_delete=models.CASCADE)
-    fee_structure = models.ForeignKey(FeeStructure, on_delete=models.CASCADE)
-
-    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    assigned_date = models.DateField(auto_now_add=True)
-
-
-class FeeInstallment(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),
         ("partial", "Partial"),
         ("paid", "Paid"),
-        ("overdue", "Overdue"),
+        ("cancelled", "Cancelled"),
+    ]
+    LATE_FEE_TYPE_CHOICES = [
+        ("fixed", "Fixed"),
+        ("per_day", "Per Day"),
     ]
 
-    student_fee = models.ForeignKey(
-        StudentFee, on_delete=models.CASCADE, related_name="installments"
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True)
+    academic_year = models.ForeignKey(
+        AcademicYear, on_delete=models.CASCADE, null=True, blank=True
+    )
+    student = models.ForeignKey(
+        Student, on_delete=models.CASCADE, related_name="student_fees"
+    )
+    feetype = models.ForeignKey(FeeType, on_delete=models.CASCADE)
+    fee_wise_class = models.ForeignKey(
+        FeeWiseClass, on_delete=models.SET_NULL, null=True, blank=True
     )
 
-    installment_no = models.IntegerField()
-
-    due_date = models.DateField()  # last date to pay
-
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    billing_period = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Example: 2026-04 for monthly, Q1 for quarterly, or blank for single fees.",
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount_reference = models.CharField(max_length=255, null=True, blank=True)
+    discount_note = models.TextField(null=True, blank=True)
+    late_fee_enabled = models.BooleanField(default=False)
+    grace_days = models.PositiveIntegerField(default=0)
+    late_fee_type = models.CharField(
+        max_length=20, choices=LATE_FEE_TYPE_CHOICES, null=True, blank=True
+    )
+    late_fee_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    max_late_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    fine_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     paid_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
+    due_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    payment_mode = models.CharField(max_length=100, null=True, blank=True)
+    transaction_id = models.CharField(max_length=255, null=True, blank=True)
 
-    paid_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
 
-    late_fee = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    class Meta:
+        unique_together = ("student", "feetype", "academic_year", "billing_period")
+
+    @property
+    def payable_amount(self):
+        base_amount = self.amount or 0
+        return base_amount + self.fine_amount - self.discount_amount
+
+    @property
+    def balance_amount(self):
+        return self.payable_amount - self.paid_amount
+
+    def calculate_late_fee(self, today=None):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        if not self.late_fee_enabled or not self.due_date or self.status in ["paid", "cancelled"]:
+            return 0
+
+        today = today or timezone.localdate()
+        penalty_start_date = self.due_date + timedelta(days=self.grace_days)
+
+        if today <= penalty_start_date:
+            return 0
+
+        if self.late_fee_type == "fixed":
+            late_fee = self.late_fee_amount
+        elif self.late_fee_type == "per_day":
+            late_days = (today - penalty_start_date).days
+            late_fee = self.late_fee_amount * late_days
+        else:
+            late_fee = 0
+
+        if self.max_late_fee is not None:
+            late_fee = min(late_fee, self.max_late_fee)
+
+        return late_fee
+
+    def apply_late_fee(self, today=None, save=True):
+        self.fine_amount = self.calculate_late_fee(today=today)
+        if save:
+            self.save(update_fields=["fine_amount"])
+        return self.fine_amount
+
+    def refresh_payment_status(self):
+        from django.db.models import Sum
+        from django.utils import timezone
+
+        total_paid = self.payments.filter(is_verified=True).aggregate(total=Sum("amount"))["total"] or 0
+        self.paid_amount = total_paid
+
+        if total_paid <= 0:
+            self.status = "pending"
+            self.paid_at = None
+        elif total_paid >= self.payable_amount:
+            self.status = "paid"
+            self.paid_at = timezone.now()
+        else:
+            self.status = "partial"
+            self.paid_at = None
+
+        latest_payment = self.payments.filter(is_verified=True).order_by("-payment_date", "-created_at").first()
+        if latest_payment:
+            self.payment_mode = latest_payment.payment_mode
+            self.transaction_id = latest_payment.transaction_id
+        else:
+            self.payment_mode = None
+            self.transaction_id = None
+
+        self.save(update_fields=["paid_amount", "status", "paid_at", "payment_mode", "transaction_id"])
+
+    def save(self, *args, **kwargs):
+        if self.fee_wise_class:
+            self.feetype = self.fee_wise_class.feetype
+            if self.amount is None:
+                self.amount = self.fee_wise_class.amount
+            if not self.pk:
+                self.late_fee_enabled = self.fee_wise_class.late_fee_enabled
+                self.grace_days = self.fee_wise_class.grace_days
+                self.late_fee_type = self.fee_wise_class.late_fee_type
+                self.late_fee_amount = self.fee_wise_class.late_fee_amount
+                self.max_late_fee = self.fee_wise_class.max_late_fee
+            if not self.school:
+                self.school = self.fee_wise_class.school
+
+        if self.student and not self.school:
+            self.school = self.student.school
+
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.student} - {self.feetype} - {self.billing_period or 'single'}"
 
 
-class FeePayment(models.Model):
-    PAYMENT_MODE = [
+class StudentFeePayment(models.Model):
+    PAYMENT_MODE_CHOICES = [
         ("cash", "Cash"),
         ("online", "Online"),
+        ("cheque", "Cheque"),
+        ("bank_transfer", "Bank Transfer"),
+        ("upi", "UPI"),
     ]
 
-    student = models.ForeignKey(Student, on_delete=models.CASCADE)
-    installment = models.ForeignKey(FeeInstallment, on_delete=models.CASCADE)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, null=True, blank=True)
+    student_fee = models.ForeignKey(
+        StudentFee, on_delete=models.CASCADE, related_name="payments"
+    )
+    student = models.ForeignKey(
+        Student, on_delete=models.CASCADE, related_name="fee_payments"
+    )
+    feetype = models.ForeignKey(FeeType, on_delete=models.CASCADE)
 
-    amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_mode = models.CharField(max_length=20, choices=PAYMENT_MODE_CHOICES)
+    transaction_id = models.CharField(max_length=255, null=True, blank=True)
+    razorpay_order_id = models.CharField(max_length=255, null=True, blank=True)
+    razorpay_payment_id = models.CharField(max_length=255, null=True, blank=True)
+    razorpay_signature = models.CharField(max_length=255, null=True, blank=True)
+    receipt_number = models.CharField(max_length=100, null=True, blank=True)
+    payment_date = models.DateTimeField(null=True, blank=True)
+    note = models.TextField(null=True, blank=True)
 
-    payment_date = models.DateField(auto_now_add=True)
-    payment_mode = models.CharField(max_length=20, choices=PAYMENT_MODE)
+    collected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="collected_fee_payments",
+    )
+    is_verified = models.BooleanField(default=False)
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="verified_student_fee_payments",
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
 
-    transaction_id = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if self.student_fee:
+            self.school = self.student_fee.school
+            self.student = self.student_fee.student
+            self.feetype = self.student_fee.feetype
+
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.student} - {self.feetype} - {self.amount}"
+
+    
+

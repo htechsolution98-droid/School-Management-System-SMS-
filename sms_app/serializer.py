@@ -1,3 +1,6 @@
+
+from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 from django.db import transaction
 from rest_framework import serializers
@@ -7,6 +10,7 @@ from rest_framework import serializers
 from django.contrib.auth.hashers import check_password
 from django.utils import timezone
 from datetime import timedelta
+from decimal import Decimal
 from xml.parsers.expat import model
 from rest_framework import serializers
 from .models import *
@@ -42,7 +46,7 @@ import random
 
 # from django.contrib.auth.models import User
 from rest_framework import serializers
-from django.db.models import Q
+from django.db.models import Q, Sum
 
 
 class VerifyOTPSerializer(serializers.Serializer):
@@ -199,7 +203,7 @@ class SchoolFeatureSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         school = data.get("school")
-        feature = data.get("name")
+        feature = data.get("feature")
 
         if SchoolFeature.objects.filter(school=school, feature=feature).exists():
             raise serializers.ValidationError(
@@ -214,15 +218,34 @@ class GetFeatureSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = SchoolFeature
-        fields = ['feature_name']
+        fields = ['id','feature_name']
 
-
+from rest_framework import serializers
 
 class SchoolSerializer(serializers.ModelSerializer):
+    feature_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Feature.objects.all(),
+        many=True,
+        write_only=True
+    )
+    
     class Meta:
         model = School
         fields = "__all__"
-        read_only_fields = ["code", "login_id"]
+        read_only_fields = ["slug","login_id"]
+        
+    def validate(self, data):
+        email = data.get("email")
+        if User.objects.filter(email=email).exists():
+            raise serializers.ValidationError({"message": "Email is already exists."})
+        return data
+    def validate_feature_ids(self, value):
+        ids = [f.id for f in value]
+
+        if len(ids) != len(set(ids)):
+            raise serializers.ValidationError("Duplicate features are not allowed.")
+
+        return value
 
 
 class StaffSerializer(serializers.ModelSerializer):
@@ -1003,7 +1026,7 @@ class TempUserAdmissionDataSerializer(serializers.ModelSerializer):
             "field_values",
         ]
 
-    # ✅ Extract school_class from dynamic fields
+    # Extract school_class from dynamic fields
     def get_school_class(self, obj):
         field_value = obj.field_values.filter(
             field__map_to_student_field="school_class"
@@ -1011,7 +1034,7 @@ class TempUserAdmissionDataSerializer(serializers.ModelSerializer):
 
         return field_value.value if field_value else None
 
-    # ✅ Extract division (if mapped)
+    # Extract division (if mapped)
 
 
 # ============================================================
@@ -1090,6 +1113,7 @@ class DivisionSetSerilaizer(serializers.ModelSerializer):
 # =======================
 # Field Value Serializer
 # =======================
+
 class AdmissionFieldValueReadSerializer(serializers.ModelSerializer):
     field_label = serializers.CharField(source="field.label", read_only=True)
 
@@ -1097,10 +1121,10 @@ class AdmissionFieldValueReadSerializer(serializers.ModelSerializer):
         model = AdmissionFieldValue
         fields = ["id", "field", "field_label", "value"]
 
-
 # =======================
 # Document Serializer
 # =======================
+
 class AdmissionDocumentReadSerializer(serializers.ModelSerializer):
     document_label = serializers.CharField(
         source="document_field.label", read_only=True
@@ -1114,8 +1138,6 @@ class AdmissionDocumentReadSerializer(serializers.ModelSerializer):
 # =======================
 # Main Serializer
 # =======================
-from django.db import transaction
-from django.utils import timezone
 
 
 class ClerkVerifySerializer(serializers.ModelSerializer):
@@ -1137,25 +1159,39 @@ class ClerkVerifySerializer(serializers.ModelSerializer):
             "field_values",
             "documents",
         ]
-
+    def validate(self, attrs):
+        gr_no = attrs.get("gr_no")
+        
+        if User.objects.filter(username = gr_no).exists():
+            raise serializers.ValidationError({
+                "meassage":"This student already created"
+            })
+            
+        return attrs
     def update(self, instance, validated_data):
 
         request = self.context.get("request")
         gr_no = validated_data.pop("gr_no")
+        g = instance.status
+        print(g)
         with transaction.atomic():
 
             # =========================
             # 1. MARK CLERK VERIFIED
             # =========================
-            instance.clerk_verified = True
-            instance.clerk_verified_at = timezone.now()
-            instance.save()
+            # instance.clerk_verified = True
+            # instance.clerk_verified_at = timezone.now()
+            # instance.save()
 
             # =========================
             # 2. CREATE STUDENT
             # =========================
-
+           
             # Generate GR number
+            if StudentVerify.objects.filter(admission_number=instance.admission_number).exists():
+                raise serializers.ValidationError({
+                    "message":"This Student already created"
+                })
 
             student = Student.objects.create(
                 school=self.context["request"].user.school,
@@ -1165,7 +1201,13 @@ class ClerkVerifySerializer(serializers.ModelSerializer):
                 gr_no=gr_no,
                 # details_done=True,
             )
-
+            
+            
+            StudentVerify.objects.create(
+                gr_no = gr_no,
+                student = student,
+                clerk_verify = True
+            )
             # =========================
             # 3. MAP FIXED FIELDS
             # =========================
@@ -1231,6 +1273,7 @@ class ClerkVerifySerializer(serializers.ModelSerializer):
 
             # =========================
             # 7. CREATE PARENT USER
+            
             # =========================
             mobile = student.mobile
             last_six = str(mobile)[-6:]
@@ -2203,5 +2246,482 @@ class FeeTypeSerializer(serializers.ModelSerializer):
         model = FeeType
         fields = "__all__"
         read_only_fields = ['school']
+
+
+class AcademicYearSerializer(serializers.ModelSerializer):
+    month_numbers = serializers.SerializerMethodField()
+    billing_periods = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AcademicYear
+        fields = [
+            "id",
+            "school",
+            "name",
+            "start_month",
+            "end_month",
+            "month_numbers",
+            "billing_periods",
+        ]
+        read_only_fields = ["school"]
+
+    def get_month_numbers(self, obj):
+        return obj.get_month_numbers()
+
+    def get_billing_periods(self, obj):
+        return obj.get_billing_periods()
+
+    def validate(self, attrs):
+        start_month = attrs.get("start_month", getattr(self.instance, "start_month", None))
+        end_month = attrs.get("end_month", getattr(self.instance, "end_month", None))
+
+        if not self.instance and (start_month is None or end_month is None):
+            raise serializers.ValidationError(
+                {
+                    "start_month": "Start month is required.",
+                    "end_month": "End month is required.",
+                }
+            )
+
+        for field_name, month in [("start_month", start_month), ("end_month", end_month)]:
+            if month is not None and (month < 1 or month > 12):
+                raise serializers.ValidationError({field_name: "Month must be between 1 and 12."})
+
+        return attrs
+
+
+class FeeWiseClassSerializer(serializers.ModelSerializer):
+    feetype_name = serializers.CharField(source="feetype.name", read_only=True)
+    school_class_name = serializers.CharField(
+        source="school_class.get_school_class_display", read_only=True
+    )
+
+    class Meta:
+        model = FeeWiseClass
+        fields = [
+            "id",
+            "school",
+            "feetype",
+            "feetype_name",
+            "school_class",
+            "school_class_name",
+            "amount",
+            "late_fee_enabled",
+            "grace_days",
+            "late_fee_type",
+            "late_fee_amount",
+            "max_late_fee",
+        ]
+        read_only_fields = ["school", "feetype_name", "school_class_name"]
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        school = getattr(request.user, "school", None) if request else None
+        feetype = attrs.get("feetype", getattr(self.instance, "feetype", None))
+        school_class = attrs.get(
+            "school_class", getattr(self.instance, "school_class", None)
+        )
+
+        if school and feetype and feetype.school_id != school.id:
+            raise serializers.ValidationError({"feetype": "Invalid fee type for this school."})
+
+        if school and school_class and school_class.school_id != school.id:
+            raise serializers.ValidationError(
+                {"school_class": "Invalid class for this school."}
+            )
+
+        late_fee_enabled = attrs.get(
+            "late_fee_enabled", getattr(self.instance, "late_fee_enabled", False)
+        )
+        late_fee_type = attrs.get("late_fee_type", getattr(self.instance, "late_fee_type", None))
+        late_fee_amount = attrs.get(
+            "late_fee_amount", getattr(self.instance, "late_fee_amount", Decimal("0.00"))
+        )
+        max_late_fee = attrs.get("max_late_fee", getattr(self.instance, "max_late_fee", None))
+
+        if late_fee_enabled and not late_fee_type:
+            raise serializers.ValidationError(
+                {"late_fee_type": "Late fee type is required when late fee is enabled."}
+            )
+
+        if late_fee_enabled and late_fee_amount <= 0:
+            raise serializers.ValidationError(
+                {"late_fee_amount": "Late fee amount must be greater than 0."}
+            )
+
+        if max_late_fee is not None and max_late_fee < 0:
+            raise serializers.ValidationError(
+                {"max_late_fee": "Maximum late fee cannot be negative."}
+            )
+
+        return attrs
+
+
+class StudentFeeSerializer(serializers.ModelSerializer):
+    student_name = serializers.SerializerMethodField()
+    feetype = serializers.PrimaryKeyRelatedField(
+        queryset=FeeType.objects.all(), required=False
+    )
+    feetype_name = serializers.CharField(source="feetype.name", read_only=True)
+    school_class = serializers.IntegerField(
+        source="student.school_class_id", read_only=True
+    )
+    school_class_name = serializers.SerializerMethodField()
+    payable_amount = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True
+    )
+    actual_payable_amount = serializers.DecimalField(
+        source="payable_amount", max_digits=10, decimal_places=2, read_only=True
+    )
+    balance_amount = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True
+    )
+    payments = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentFee
+        fields = [
+            "id",
+            "school",
+            "academic_year",
+            "student",
+            "student_name",
+            "school_class",
+            "school_class_name",
+            "feetype",
+            "feetype_name",
+            "fee_wise_class",
+            "billing_period",
+            "amount",
+            "discount_amount",
+            "discount_reference",
+            "discount_note",
+            "late_fee_enabled",
+            "grace_days",
+            "late_fee_type",
+            "late_fee_amount",
+            "max_late_fee",
+            "fine_amount",
+            "paid_amount",
+            "payable_amount",
+            "actual_payable_amount",
+            "balance_amount",
+            "due_date",
+            "status",
+            "payment_mode",
+            "transaction_id",
+            "payments",
+            "created_at",
+            "paid_at",
+        ]
+        read_only_fields = [
+            "school",
+            "student_name",
+            "school_class",
+            "school_class_name",
+            "feetype_name",
+            "payable_amount",
+            "actual_payable_amount",
+            "balance_amount",
+            "payments",
+            "created_at",
+        ]
+        validators = []
+
+    def get_student_name(self, obj):
+        return " ".join(
+            filter(None, [obj.student.surname, obj.student.name, obj.student.father_name])
+        )
+
+    def get_school_class_name(self, obj):
+        if obj.student and obj.student.school_class:
+            return obj.student.school_class.get_school_class_display()
+        return None
+
+    def get_payments(self, obj):
+        payments = obj.payments.order_by("-payment_date", "-created_at")
+        return StudentFeePaymentSerializer(payments, many=True, context=self.context).data
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        school = getattr(request.user, "school", None) if request else None
+
+        student = attrs.get("student", getattr(self.instance, "student", None))
+        academic_year = attrs.get(
+            "academic_year", getattr(self.instance, "academic_year", None)
+        )
+        fee_wise_class = attrs.get(
+            "fee_wise_class", getattr(self.instance, "fee_wise_class", None)
+        )
+        feetype = attrs.get("feetype", getattr(self.instance, "feetype", None))
+        billing_period = attrs.get(
+            "billing_period", getattr(self.instance, "billing_period", "")
+        )
+
+        if school and student and student.school_id != school.id:
+            raise serializers.ValidationError({"student": "Invalid student for this school."})
+
+        if school and academic_year and academic_year.school_id != school.id:
+            raise serializers.ValidationError(
+                {"academic_year": "Invalid academic year for this school."}
+            )
+
+        if fee_wise_class:
+            if school and fee_wise_class.school_id != school.id:
+                raise serializers.ValidationError(
+                    {"fee_wise_class": "Invalid fee amount setup for this school."}
+                )
+            if student and fee_wise_class.school_class_id != student.school_class_id:
+                raise serializers.ValidationError(
+                    {"fee_wise_class": "This fee is not configured for the student's class."}
+                )
+            feetype = fee_wise_class.feetype
+            attrs["feetype"] = feetype
+            if attrs.get("amount") is None:
+                attrs["amount"] = fee_wise_class.amount
+
+        if not feetype:
+            raise serializers.ValidationError(
+                {"feetype": "Fee type is required when fee_wise_class is not provided."}
+            )
+
+        if school and feetype and feetype.school_id != school.id:
+            raise serializers.ValidationError({"feetype": "Invalid fee type for this school."})
+
+        if feetype and feetype.billing_cycle == "monthly":
+            if not billing_period:
+                raise serializers.ValidationError(
+                    {"billing_period": "Billing period is required for monthly fees."}
+                )
+
+            if not re.match(r"^\d{4}-\d{2}$", billing_period):
+                raise serializers.ValidationError(
+                    {"billing_period": "Billing period must be in YYYY-MM format."}
+                )
+
+            if academic_year and academic_year.start_month and academic_year.end_month:
+                valid_periods = academic_year.get_billing_periods()
+                if billing_period not in valid_periods:
+                    raise serializers.ValidationError(
+                        {
+                            "billing_period": (
+                                "Billing period must be one of this academic year's months: "
+                                f"{', '.join(valid_periods)}"
+                            )
+                        }
+                    )
+
+            due_date = attrs.get("due_date", getattr(self.instance, "due_date", None))
+            if due_date and due_date.strftime("%Y-%m") != billing_period:
+                raise serializers.ValidationError(
+                    {"due_date": "Due date must be inside the selected billing period month."}
+                )
+
+        amount = attrs.get("amount", getattr(self.instance, "amount", Decimal("0.00")))
+        discount_amount = attrs.get(
+            "discount_amount", getattr(self.instance, "discount_amount", Decimal("0.00"))
+        )
+        discount_reference = attrs.get(
+            "discount_reference", getattr(self.instance, "discount_reference", None)
+        )
+        fine_amount = attrs.get(
+            "fine_amount", getattr(self.instance, "fine_amount", Decimal("0.00"))
+        )
+        paid_amount = attrs.get(
+            "paid_amount", getattr(self.instance, "paid_amount", Decimal("0.00"))
+        )
+
+        payable_amount = (amount or Decimal("0.00")) + fine_amount - discount_amount
+        if discount_amount < 0:
+            raise serializers.ValidationError(
+                {"discount_amount": "Discount amount cannot be negative."}
+            )
+
+        if amount is not None and discount_amount > amount:
+            raise serializers.ValidationError(
+                {"discount_amount": "Discount cannot be greater than fee amount."}
+            )
+
+        if discount_amount > 0 and not discount_reference:
+            raise serializers.ValidationError(
+                {"discount_reference": "Discount reference is required when discount is applied."}
+            )
+
+        if paid_amount > payable_amount:
+            raise serializers.ValidationError(
+                {"paid_amount": "Paid amount cannot be greater than payable amount."}
+            )
+
+        late_fee_enabled = attrs.get(
+            "late_fee_enabled", getattr(self.instance, "late_fee_enabled", False)
+        )
+        late_fee_type = attrs.get("late_fee_type", getattr(self.instance, "late_fee_type", None))
+        late_fee_amount = attrs.get(
+            "late_fee_amount", getattr(self.instance, "late_fee_amount", Decimal("0.00"))
+        )
+        max_late_fee = attrs.get("max_late_fee", getattr(self.instance, "max_late_fee", None))
+
+        if late_fee_enabled and not late_fee_type:
+            raise serializers.ValidationError(
+                {"late_fee_type": "Late fee type is required when late fee is enabled."}
+            )
+
+        if late_fee_enabled and late_fee_amount <= 0:
+            raise serializers.ValidationError(
+                {"late_fee_amount": "Late fee amount must be greater than 0."}
+            )
+
+        if max_late_fee is not None and max_late_fee < 0:
+            raise serializers.ValidationError(
+                {"max_late_fee": "Maximum late fee cannot be negative."}
+            )
+
+        existing = StudentFee.objects.filter(
+            student=student,
+            feetype=feetype,
+            academic_year=academic_year,
+            billing_period=billing_period or "",
+        )
+        if self.instance:
+            existing = existing.exclude(pk=self.instance.pk)
+        if student and feetype and existing.exists():
+            raise serializers.ValidationError(
+                "This student fee already exists for this fee type, year, and period."
+            )
+
+        return attrs
+
+
+class StudentFeePaymentSerializer(serializers.ModelSerializer):
+    student = serializers.PrimaryKeyRelatedField(read_only=True)
+    student_name = serializers.SerializerMethodField()
+    feetype = serializers.PrimaryKeyRelatedField(read_only=True)
+    feetype_name = serializers.CharField(source="feetype.name", read_only=True)
+    balance_after_payment = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentFeePayment
+        fields = [
+            "id",
+            "school",
+            "student_fee",
+            "student",
+            "student_name",
+            "feetype",
+            "feetype_name",
+            "amount",
+            "payment_mode",
+            "transaction_id",
+            "razorpay_order_id",
+            "razorpay_payment_id",
+            "razorpay_signature",
+            "receipt_number",
+            "payment_date",
+            "note",
+            "collected_by",
+            "is_verified",
+            "verified_by",
+            "verified_at",
+            "balance_after_payment",
+            "created_at",
+        ]
+        read_only_fields = [
+            "school",
+            "student",
+            "student_name",
+            "feetype",
+            "feetype_name",
+            "razorpay_order_id",
+            "razorpay_payment_id",
+            "razorpay_signature",
+            "collected_by",
+            "verified_by",
+            "verified_at",
+            "balance_after_payment",
+            "created_at",
+        ]
+
+    def get_student_name(self, obj):
+        return " ".join(
+            filter(None, [obj.student.surname, obj.student.name, obj.student.father_name])
+        )
+
+    def get_balance_after_payment(self, obj):
+        return obj.student_fee.balance_amount
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        school = getattr(request.user, "school", None) if request else None
+        student_fee = attrs.get("student_fee", getattr(self.instance, "student_fee", None))
+        amount = attrs.get("amount", getattr(self.instance, "amount", Decimal("0.00")))
+
+        if not student_fee:
+            raise serializers.ValidationError({"student_fee": "Student fee is required."})
+
+        if school and student_fee.school_id != school.id:
+            raise serializers.ValidationError(
+                {"student_fee": "Invalid student fee for this school."}
+            )
+
+        if student_fee.status == "cancelled":
+            raise serializers.ValidationError(
+                {"student_fee": "Payment cannot be added for a cancelled fee."}
+            )
+
+        student_fee.apply_late_fee()
+
+        if amount <= 0:
+            raise serializers.ValidationError({"amount": "Amount must be greater than 0."})
+
+        if self.instance and student_fee.pk != self.instance.student_fee_id:
+            raise serializers.ValidationError(
+                {"student_fee": "Student fee cannot be changed after payment is created."}
+            )
+
+        paid_except_this = (
+            student_fee.payments.filter(is_verified=True).aggregate(total=Sum("amount"))["total"]
+            or Decimal("0.00")
+        )
+        if self.instance:
+            if self.instance.is_verified:
+                paid_except_this -= self.instance.amount
+
+        remaining_amount = student_fee.payable_amount - paid_except_this
+        if amount > remaining_amount:
+            raise serializers.ValidationError(
+                {"amount": f"Amount cannot be greater than remaining balance {remaining_amount}."}
+            )
+
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        request = self.context.get("request")
+        user = request.user if request and request.user.is_authenticated else None
+
+        if not validated_data.get("payment_date"):
+            validated_data["payment_date"] = timezone.now()
+        if user:
+            validated_data["collected_by"] = user
+        if validated_data.get("is_verified") and user:
+            validated_data["verified_by"] = user
+            validated_data["verified_at"] = timezone.now()
+
+        payment = super().create(validated_data)
+        payment.student_fee.refresh_payment_status()
+        return payment
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        request = self.context.get("request")
+        user = request.user if request and request.user.is_authenticated else None
+
+        if validated_data.get("is_verified") and not instance.is_verified and user:
+            validated_data["verified_by"] = user
+            validated_data["verified_at"] = timezone.now()
+
+        payment = super().update(instance, validated_data)
+        payment.student_fee.refresh_payment_status()
+        return payment
 
 

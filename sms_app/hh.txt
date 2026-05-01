@@ -1,0 +1,166 @@
+all api that start to end of fee manageement
+3:11 PM
+
+Fee Management API Flow
+
+Create Academic Year
+POST /api/academic-year/
+{
+  "name": "2026-27",
+  "start_month": 4,
+  "end_month": 3
+}
+
+Get Academic Years
+GET /api/academic-year/
+Response includes valid months:
+
+{
+  "billing_periods": [
+    "2026-04",
+    "2026-05",
+    "2026-06",
+    "2026-07",
+    "2026-08",
+    "2026-09",
+    "2026-10",
+    "2026-11",
+    "2026-12",
+    "2027-01",
+    "2027-02",
+    "2027-03"
+  ]
+}
+Create Fee Type
+POST /api/feetype/
+{
+  "name": "Tuition Fee",
+  "billing_cycle": "monthly"
+}
+Billing cycle options:
+
+single, monthly, quarterly, half_yearly, yearly
+Get Fee Types
+GET /api/feetype/
+Create Class-Wise Fee
+POST /api/fee-wise-class/
+
+{
+  "feetype": 1,
+  "school_class": 2,
+  "amount": "1500.00",
+  "late_fee_enabled": true,
+  "grace_days": 5,
+  "late_fee_type": "per_day",
+  "late_fee_amount": "20.00",
+  "max_late_fee": "500.00"
+}
+
+Disable late fee: same api----check remaining
+
+{
+  "feetype": 1,
+  "school_class": 2,
+  "amount": "1500.00",
+  "late_fee_enabled": false
+}
+Get Class-Wise Fees
+GET /api/fee-wise-class/
+GET /api/fee-wise-class/?school_class=2
+GET /api/fee-wise-class/?feetype=1
+Create Student Fee
+For monthly fee:
+
+POST /api/student-fee/
+{
+  "student": 5,
+  "academic_year": 1,
+  "fee_wise_class": 1,
+  "billing_period": "2026-04",
+  "due_date": "2026-04-10"
+}
+For single fee:
+
+{
+  "student": 5,
+  "academic_year": 1,
+  "fee_wise_class": 2,
+  "billing_period": "",
+  "due_date": "2026-04-10"
+}
+Add Discount
+PATCH /api/student-fee/1/
+{
+  "discount_amount": "200.00",
+  "discount_reference": "Principal approval #123",
+  "discount_note": "Sibling discount"
+}
+Get Student Fees
+GET /api/student-fee/
+GET /api/student-fee/?student=5
+GET /api/student-fee/?school_class=2
+GET /api/student-fee/?academic_year=1
+GET /api/student-fee/?status=pending
+GET /api/student-fee/?billing_period=2026-04
+Response includes:
+
+{
+  "amount": "1500.00",
+  "discount_amount": "200.00",
+  "fine_amount": "100.00",
+  "paid_amount": "0.00",
+  "actual_payable_amount": "1400.00",
+  "balance_amount": "1400.00",
+  "payments": []
+}
+Formula:
+
+actual_payable_amount = amount + fine_amount - discount_amount
+Create Razorpay Order
+POST /api/student-fee/razor/order/
+Full remaining amount:
+
+{
+  "student_fee": 1
+}
+Partial amount:
+
+{
+  "student_fee": 1,
+  "amount": "500.00"
+}
+Verify Razorpay Payment
+POST /api/student-fee/razor/verify/
+{
+  "razorpay_order_id": "order_xxxxx",
+  "razorpay_payment_id": "pay_xxxxx",
+  "razorpay_signature": "signature_xxxxx"
+}
+Offline Payment
+POST /api/student-fee-payment/
+{
+  "student_fee": 1,
+  "amount": "500.00",
+  "payment_mode": "cash",
+  "receipt_number": "REC-001",
+  "note": "Paid at office",
+  "is_verified": true
+}
+Payment modes:
+
+cash, online, cheque, bank_transfer, upi
+Get Payment History
+GET /api/student-fee-payment/
+GET /api/student-fee-payment/?student_fee=1
+GET /api/student-fee-payment/?student=5
+GET /api/student-fee-payment/?school_class=2
+GET /api/student-fee-payment/?payment_mode=cash
+GET /api/student-fee-payment/?date_from=2026-04-01&date_to=2026-04-30
+Update Student Fee Status Manually
+PATCH /api/student-fee/1/
+{
+  "status": "cancelled"
+}
+Status options:
+
+pending, partial, paid, cancelled

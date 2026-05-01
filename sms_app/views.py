@@ -75,6 +75,7 @@ from django.core.cache import cache
 
 import pandas as pd
 from datetime import datetime
+from decimal import Decimal
 from django.contrib.auth import get_user_model
 
 # from yourapp.models import Student, SchoolClass, School
@@ -433,7 +434,7 @@ class FeatureView(ModelViewSet):
 class SchoolFeatureView(ModelViewSet):
     queryset = SchoolFeature.objects.all()
     serializer_class = SchoolFeatureSerializer
-    # permission_classes = [IsAuthenticated,Is_super_admin]
+    permission_classes = [IsAuthenticated,Is_super_admin]
     
     
 class GetFeatureView(ModelViewSet):
@@ -446,69 +447,75 @@ class GetFeatureView(ModelViewSet):
     def get_queryset(self):
         school = self.request.user.school
         return SchoolFeature.objects.filter(school = school,is_enabled = True)
-        
+    
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.permissions import IsAuthenticated
+
+from django.db import transaction
+from django.core.cache import cache
+from rest_framework import serializers
+    
 class SchoolView(ModelViewSet):
     queryset = School.objects.all()
     serializer_class = SchoolSerializer
     permission_classes = [IsAuthenticated]
-    # module_code = "STUDENT"
 
-    # 🔹 Get schools with cache
+    # ✅ Cache-safe queryset
     def get_queryset(self):
         cache_key = "school_list"
-
         data = cache.get(cache_key)
 
-        if not data:
-            qs = School.objects.all()
-            return qs
+        if data:
+            return data
 
-    # # 🔹 Override list to cache serialized data (BEST PRACTICE)
-    # def list(self, request, *args, **kwargs):
-    #     cache_key = "school_list"
+        qs = School.objects.all()
+        cache.set(cache_key, qs, timeout=300)
+        return qs
 
-    #     data = cache.get(cache_key)
-
-    #     if not data:
-    #         queryset = School.objects.all()
-    #         serializer = self.get_serializer(queryset, many=True)
-    #         data = serializer.data
-    #         cache.set(cache_key, data, timeout=60 * 10)  # 10 minutes
-
-    #     response = Response(data)
-    #      # 👈 check in Postman
-    #     return response
-
-    # Create school + clear cache
     def perform_create(self, serializer):
+        features = serializer.validated_data.pop("feature_ids", [])
         name = serializer.validated_data.get("name")
         email = serializer.validated_data.get("email")
-
-        school_code = generate_school_code(name)
-
-        if User.objects.filter(username=school_code).exists():
-            school_code = generate_school_code(name)
 
         if not email:
             raise serializers.ValidationError("Provide email for school admin user")
 
+        # ✅ Generate unique school code
+        school_code = generate_school_code(name)
+        while User.objects.filter(username=school_code).exists():
+            school_code = generate_school_code(name)
+
         with transaction.atomic():
-            user = User.objects.create(username=school_code)
-            user.email = email
-            user.role = "admin(trustee)"
-            password = "123456"
-            user.set_password(password)
+            # ✅ Create user
+            user = User.objects.create(username=school_code, email=email)
+            user.role = "admin(trustee)"  # if custom field exists
+            user.set_password("123456")
             user.save()
 
-            group, created = Group.objects.get_or_create(name="admin(trustee)")
+            # ✅ Assign group
+            group, _ = Group.objects.get_or_create(name="admin(trustee)")
             user.groups.add(group)
 
+            # ✅ Create school
             school = serializer.save(login_id=user)
-            user.school = school
-            user.save()
 
+            # ✅ Bulk create school features
+            school_features = [
+                SchoolFeature(
+                    school=school,
+                    feature=feature,
+                    is_enabled=True
+                )
+                for feature in features
+            ]
+
+            SchoolFeature.objects.bulk_create(school_features)
+
+            # ✅ Link user to school
+            user.school = school  # if field exists
+            user.save()
         #  Clear cache after create
-        cache.delete("school_list")
+        # cache.delete("school_list")
 
     # 🔹 Update + clear cache
     def perform_update(self, serializer):
@@ -695,7 +702,7 @@ class AdmissionReadOnlyViewSet(ReadOnlyModelViewSet):
 class ClerkVerifyView(ModelViewSet):
     queryset = Admission.objects.all()
     serializer_class = ClerkVerifySerializer
-    permission_classes = [IsAuthenticated, IsFeeManager]
+    permission_classes = [IsAuthenticated, IsCLerk]
     lookup_field = "admission_number"
 
     def get_queryset(self):
@@ -2188,10 +2195,22 @@ class upload_students(APIView):
 # ============FEE MANAGEMENT VIEW==============
 
 
+class AcademicYearViewSet(ModelViewSet):
+    queryset = AcademicYear.objects.all()
+    serializer_class = AcademicYearSerializer
+    permission_classes = [IsAuthenticated, IsCLerk]
+
+    def get_queryset(self):
+        return AcademicYear.objects.filter(school=self.request.user.school)
+
+    def perform_create(self, serializer):
+        serializer.save(school=self.request.user.school)
+
+
 class FeeTypeViewSet(ModelViewSet):
     queryset = FeeType.objects.all()
     serializer_class = FeeTypeSerializer
-    permission_classes = [IsAuthenticated, IsFeeManager]
+    permission_classes = [IsAuthenticated, IsCLerk]
     
     def get_queryset(self):
         return FeeType.objects.filter(school =  self.request.user.school)
@@ -2199,3 +2218,303 @@ class FeeTypeViewSet(ModelViewSet):
     def perform_create(self, serializer):
         school =  self.request.user.school
         serializer.save(school=school)
+
+
+class FeeWiseClassViewSet(ModelViewSet):
+    queryset = FeeWiseClass.objects.all()
+    serializer_class = FeeWiseClassSerializer
+    permission_classes = [IsAuthenticated, IsCLerk]
+
+    def get_queryset(self):
+        queryset = FeeWiseClass.objects.filter(
+            school=self.request.user.school
+        ).select_related("feetype", "school_class")
+
+        feetype = self.request.query_params.get("feetype")
+        school_class = self.request.query_params.get("school_class")
+
+        if feetype:
+            queryset = queryset.filter(feetype_id=feetype)
+        if school_class:
+            queryset = queryset.filter(school_class_id=school_class)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(school=self.request.user.school)
+
+
+class StudentFeeViewSet(ModelViewSet):
+    queryset = StudentFee.objects.all()
+    serializer_class = StudentFeeSerializer
+    permission_classes = [IsAuthenticated, IsFeeManager]
+
+    def get_queryset(self):
+        queryset = StudentFee.objects.filter(
+            school=self.request.user.school
+        ).select_related(
+            "academic_year",
+            "student",
+            "student__school_class",
+            "feetype",
+            "fee_wise_class",
+        ).prefetch_related("payments")
+
+        student = self.request.query_params.get("student")
+        school_class = self.request.query_params.get("school_class")
+        academic_year = self.request.query_params.get("academic_year")
+        feetype = self.request.query_params.get("feetype")
+        status_value = self.request.query_params.get("status")
+        billing_period = self.request.query_params.get("billing_period")
+
+        if student:
+            queryset = queryset.filter(student_id=student)
+        if school_class:
+            queryset = queryset.filter(student__school_class_id=school_class)
+        if academic_year:
+            queryset = queryset.filter(academic_year_id=academic_year)
+        if feetype:
+            queryset = queryset.filter(feetype_id=feetype)
+        if status_value:
+            queryset = queryset.filter(status=status_value)
+        if billing_period is not None:
+            queryset = queryset.filter(billing_period=billing_period)
+
+        return queryset.order_by("-created_at")
+
+    def perform_create(self, serializer):
+        serializer.save(school=self.request.user.school)
+
+
+class StudentFeePaymentViewSet(ModelViewSet):
+    queryset = StudentFeePayment.objects.all()
+    serializer_class = StudentFeePaymentSerializer
+    permission_classes = [IsAuthenticated, IsFeeManager]
+
+    def get_queryset(self):
+        queryset = StudentFeePayment.objects.filter(
+            school=self.request.user.school
+        ).select_related(
+            "student_fee",
+            "student",
+            "student__school_class",
+            "feetype",
+            "collected_by",
+            "verified_by",
+        )
+
+        student_fee = self.request.query_params.get("student_fee")
+        student = self.request.query_params.get("student")
+        school_class = self.request.query_params.get("school_class")
+        feetype = self.request.query_params.get("feetype")
+        payment_mode = self.request.query_params.get("payment_mode")
+        is_verified = self.request.query_params.get("is_verified")
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+
+        if student_fee:
+            queryset = queryset.filter(student_fee_id=student_fee)
+        if student:
+            queryset = queryset.filter(student_id=student)
+        if school_class:
+            queryset = queryset.filter(student__school_class_id=school_class)
+        if feetype:
+            queryset = queryset.filter(feetype_id=feetype)
+        if payment_mode:
+            queryset = queryset.filter(payment_mode=payment_mode)
+        if is_verified in ["true", "false"]:
+            queryset = queryset.filter(is_verified=is_verified == "true")
+        if date_from:
+            queryset = queryset.filter(payment_date__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(payment_date__date__lte=date_to)
+
+        return queryset.order_by("-payment_date", "-created_at")
+
+    def perform_destroy(self, instance):
+        student_fee = instance.student_fee
+        instance.delete()
+        student_fee.refresh_payment_status()
+
+
+def get_student_fee_for_online_payment(user, student_fee_id):
+    student = Student.objects.filter(user=user).select_related("school").first()
+
+    if student:
+        student_fee = StudentFee.objects.select_related(
+            "student", "feetype", "school"
+        ).get(id=student_fee_id, student=student, school=student.school)
+        return student_fee, student.school
+
+    school = getattr(user, "school", None)
+    if not school:
+        raise StudentFee.DoesNotExist
+
+    student_fee = StudentFee.objects.select_related(
+        "student", "feetype", "school"
+    ).get(id=student_fee_id, school=school)
+    return student_fee, school
+
+
+def get_student_fee_payment_for_online_verify(user, order_id):
+    student = Student.objects.filter(user=user).select_related("school").first()
+    queryset = StudentFeePayment.objects.select_related(
+        "student_fee",
+        "student_fee__student",
+        "student_fee__feetype",
+        "student",
+        "feetype",
+    ).filter(razorpay_order_id=order_id)
+
+    if student:
+        return queryset.get(student=student, school=student.school)
+
+    school = getattr(user, "school", None)
+    if not school:
+        raise StudentFeePayment.DoesNotExist
+
+    return queryset.get(school=school)
+
+
+class StudentFeeRazorpayOrderView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        student_fee_id = request.data.get("student_fee")
+        requested_amount = request.data.get("amount")
+
+        try:
+            student_fee, payment_school = get_student_fee_for_online_payment(
+                request.user, student_fee_id
+            )
+        except StudentFee.DoesNotExist:
+            return Response({"error": "Student fee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if student_fee.status == "cancelled":
+            return Response(
+                {"error": "Payment cannot be created for a cancelled fee"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        student_fee.apply_late_fee()
+
+        try:
+            amount = Decimal(str(requested_amount)) if requested_amount else student_fee.balance_amount
+        except Exception:
+            return Response(
+                {"error": "Invalid amount"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if amount <= 0:
+            return Response(
+                {"error": "Amount must be greater than 0"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if amount > student_fee.balance_amount:
+            return Response(
+                {"error": f"Amount cannot be greater than remaining balance {student_fee.balance_amount}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        amount_in_paise = int(amount * 100)
+        razor_order = client.order.create(
+            {
+                "amount": amount_in_paise,
+                "currency": "INR",
+                "payment_capture": 1,
+                "notes": {
+                    "student_fee_id": str(student_fee.id),
+                    "student_id": str(student_fee.student_id),
+                    "fee_type": student_fee.feetype.name or "",
+                },
+            }
+        )
+
+        payment = StudentFeePayment.objects.create(
+            school=payment_school,
+            student_fee=student_fee,
+            amount=amount,
+            payment_mode="online",
+            razorpay_order_id=razor_order["id"],
+            collected_by=request.user,
+            is_verified=False,
+        )
+
+        return Response(
+            {
+                "key": settings.RAZOR_PAY_KEY_ID,
+                "order_id": razor_order["id"],
+                "amount": razor_order["amount"],
+                "currency": razor_order["currency"],
+                "student_fee": student_fee.id,
+                "payment": payment.id,
+                "balance_amount": student_fee.balance_amount,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class StudentFeeRazorpayVerifyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        order_id = request.data.get("razorpay_order_id")
+        payment_id = request.data.get("razorpay_payment_id")
+        signature = request.data.get("razorpay_signature")
+
+        if not all([order_id, payment_id, signature]):
+            return Response(
+                {"error": "Missing Razorpay payment parameters"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        message = f"{order_id}|{payment_id}"
+        generated_signature = hmac.new(
+            settings.RAZOR_PAY_SECRET_KEY.encode(),
+            message.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+
+        if not hmac.compare_digest(generated_signature, signature):
+            return Response(
+                {"status": "failed", "error": "Invalid payment signature"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            payment = get_student_fee_payment_for_online_verify(
+                request.user,
+                order_id,
+            )
+        except StudentFeePayment.DoesNotExist:
+            return Response({"error": "Payment order not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if payment.is_verified:
+            return Response(
+                {
+                    "status": "success",
+                    "message": "Payment already verified",
+                    "payment": StudentFeePaymentSerializer(payment).data,
+                }
+            )
+
+        with transaction.atomic():
+            payment.razorpay_payment_id = payment_id
+            payment.razorpay_signature = signature
+            payment.transaction_id = payment_id
+            payment.is_verified = True
+            payment.verified_by = request.user
+            payment.verified_at = timezone.now()
+            payment.payment_date = timezone.now()
+            if not payment.receipt_number:
+                payment.receipt_number = f"RZP-{payment.id}"
+            payment.save()
+            payment.student_fee.refresh_payment_status()
+
+        return Response(
+            {
+                "status": "success",
+                "payment": StudentFeePaymentSerializer(payment).data,
+                "student_fee": StudentFeeSerializer(payment.student_fee).data,
+            }
+        )

@@ -36,7 +36,7 @@ schema_view = get_schema_view(
         default_version='v1',
         description="Test API documentation",
     ),
-    public=True,
+    public=True,    
     permission_classes=[permissions.AllowAny],
 )
 
@@ -116,7 +116,12 @@ router.register(r'change-leave-status', ChangeLeaveView, basename='change-leave-
 router.register(r'announcements', AnnouncementView, basename='announcements')# For managing announcements
 router.register(r'get-announcements', GetAnnouncementView, basename='get-announcements')# For get announcement for student,staff with filter [school filter add remainig]   
 
+router.register(r'academic-year', AcademicYearViewSet, basename='academic-year')
+
 router.register(r'feetype', FeeTypeViewSet, basename='feetype')
+router.register(r'fee-wise-class', FeeWiseClassViewSet, basename='fee-wise-class')
+router.register(r'student-fee', StudentFeeViewSet, basename='student-fee')
+router.register(r'student-fee-payment', StudentFeePaymentViewSet, basename='student-fee-payment')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -165,6 +170,8 @@ urlpatterns = [
     
     path('api/razor/order/',RazorpayOrderView.as_view()),
     path('api/payment/verify/',VerifyPaymentView.as_view()),
+    path('api/student-fee/razor/order/', StudentFeeRazorpayOrderView.as_view()),
+    path('api/student-fee/razor/verify/', StudentFeeRazorpayVerifyView.as_view()),
     path('api/offline/payment/',OffilinePaymentView.as_view()),
     path('api/get_receipt/<int:student_id>/<int:form_id>/',get_receipt),
     path('api/webhook/',RazorpayWebhookView.as_view()),
