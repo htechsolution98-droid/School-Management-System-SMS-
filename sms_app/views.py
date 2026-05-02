@@ -454,6 +454,14 @@ class GetFeatureView(ModelViewSet):
         school = self.request.user.school
         return SchoolFeature.objects.filter(school = school,is_enabled = True)
     
+    
+class ChangeFeatureStatusVIew(ModelViewSet):
+    queryset = SchoolFeature.objects.all()
+    serializer_class = ChangeFeatureStatusSerializer
+    permission_classes = [IsAuthenticated,Is_super_admin]
+    http_method_names = ["patch"]
+    lookup_field = "id" 
+    
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
 

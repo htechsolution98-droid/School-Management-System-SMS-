@@ -45,6 +45,7 @@ router = DefaultRouter()
 router.register(r'feature',FeatureView,basename='feature')
 router.register(r'schoolfeature',SchoolFeatureView, basename='schoolfeature')
 router.register(r'getfeature',GetFeatureView, basename='getfeature')
+router.register(r'changefeaturestatus',ChangeFeatureStatusVIew, basename='changefeaturestatus')
 
 router.register(r'SchoolView',SchoolView, basename='SchoolView') # DONE
 router.register(r'StaffView',StaffView, basename='StaffView') # DONE

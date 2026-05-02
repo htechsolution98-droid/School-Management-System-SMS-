@@ -226,6 +226,11 @@ class GetFeatureSerializer(serializers.ModelSerializer):
 
 from rest_framework import serializers
 
+class ChangeFeatureStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchoolFeature
+        fields = ["is_enabled"]
+        
 
 class SchoolFeatureSerializer(serializers.ModelSerializer):
     class Meta:
