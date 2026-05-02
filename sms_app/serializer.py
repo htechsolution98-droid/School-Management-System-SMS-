@@ -1,4 +1,3 @@
-
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
@@ -187,20 +186,23 @@ class CustomeLoginSerializer(TokenObtainPairSerializer):
 
         return data
 
+
 # ----------FOR ADD FEATURE BY SUPER USER------------
+
 
 class FeatureSerialzer(serializers.ModelSerializer):
     class Meta:
         model = Feature
         fields = "__all__"
-        
+
+
 # -----------FOR SET WHICH FEATURE SCHOOL HAS-----------
 class SchoolFeatureSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchoolFeature
         fields = "__all__"
         read_only_fields = ["is_enabled"]
-    
+
     def validate(self, data):
         school = data.get("school")
         feature = data.get("feature")
@@ -209,36 +211,62 @@ class SchoolFeatureSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"message": "This Feature already have to this school"}
             )
-        return data 
+        return data
+
 
 # -----------TO GET FEATURE FRO DROP DOWN IN STAFF CREATE---------------
 class GetFeatureSerializer(serializers.ModelSerializer):
-    
-    feature_name = serializers.CharField(source = 'feature.name',read_only = True )
-    
+
+    feature_name = serializers.CharField(source="feature.name", read_only=True)
+
     class Meta:
         model = SchoolFeature
-        fields = ['id','feature_name']
+        fields = ["id", "feature_name"]
+
 
 from rest_framework import serializers
 
+
+class SchoolFeatureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchoolFeature
+        fields = "__all__"
+        read_only_fields = ["is_enabled"]
+
+
 class SchoolSerializer(serializers.ModelSerializer):
     feature_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Feature.objects.all(),
-        many=True,
-        write_only=True
+        queryset=Feature.objects.all(), many=True, write_only=True
     )
-    
+    school_features = SchoolFeatureSerializer(
+        source="schoolfeature_set", many=True, read_only=True
+    )
+
     class Meta:
         model = School
-        fields = "__all__"
-        read_only_fields = ["slug","login_id"]
-        
+        fields = [
+            "id",
+            "name",
+            "email",
+            "phone",
+            "slug",
+            "feature_ids",
+            "address",
+            "city",
+            "state",
+            "country",
+            "pincode",
+            "is_active",
+            "school_features",
+        ]
+        read_only_fields = ["slug", "login_id"]
+
     def validate(self, data):
         email = data.get("email")
         if User.objects.filter(email=email).exists():
             raise serializers.ValidationError({"message": "Email is already exists."})
         return data
+
     def validate_feature_ids(self, value):
         ids = [f.id for f in value]
 
@@ -646,9 +674,11 @@ class AdmissionSubmissionSerializer(serializers.ModelSerializer):
                 admission_number=admission_number
             ).first()
 
-
         if existing_admission:
-            if existing_admission.fee_verified and existing_admission.fee_verified == True:
+            if (
+                existing_admission.fee_verified
+                and existing_admission.fee_verified == True
+            ):
                 raise serializers.ValidationError(
                     "Cannot update admission after fee verification"
                 )
@@ -697,10 +727,10 @@ class AdmissionSubmissionSerializer(serializers.ModelSerializer):
                 temp_user=user,
                 status="pending",
             )
-            school = School.objects.filter(id = school.id).first()
-            
+            school = School.objects.filter(id=school.id).first()
+
             first_four = school.name[:4]
-            
+
             code = random.randint(1000, 9999)
             admission_number = f"{school.id}{code}-{first_four}-ADM-{admission.id:04d}"
             admission.admission_number = admission_number
@@ -798,6 +828,7 @@ class AdmissionSubmissionSerializer(serializers.ModelSerializer):
 
 # ------ Admission form document submittion serializers----------
 
+
 # 1
 class AdmissionDocumentItemSerializer(serializers.ModelSerializer):
 
@@ -809,6 +840,7 @@ class AdmissionDocumentItemSerializer(serializers.ModelSerializer):
 # 2
 from rest_framework.exceptions import ValidationError
 
+
 class AdmissionDocumentSubmissionSerializer(serializers.ModelSerializer):
 
     documents = AdmissionDocumentItemSerializer(many=True, write_only=True)
@@ -817,7 +849,7 @@ class AdmissionDocumentSubmissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdmissionDocument
         fields = ["admission_number", "documents"]
-        read_only_fields = ['school']
+        read_only_fields = ["school"]
 
     def validate(self, data):
         admission_number = data.get("admission_number")
@@ -826,7 +858,7 @@ class AdmissionDocumentSubmissionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"message": "Admission number is required"}
             )
-        
+
         temp_user = self.context["request"].user
 
         admission = Admission.objects.filter(
@@ -1114,6 +1146,7 @@ class DivisionSetSerilaizer(serializers.ModelSerializer):
 # Field Value Serializer
 # =======================
 
+
 class AdmissionFieldValueReadSerializer(serializers.ModelSerializer):
     field_label = serializers.CharField(source="field.label", read_only=True)
 
@@ -1121,9 +1154,11 @@ class AdmissionFieldValueReadSerializer(serializers.ModelSerializer):
         model = AdmissionFieldValue
         fields = ["id", "field", "field_label", "value"]
 
+
 # =======================
 # Document Serializer
 # =======================
+
 
 class AdmissionDocumentReadSerializer(serializers.ModelSerializer):
     document_label = serializers.CharField(
@@ -1159,15 +1194,17 @@ class ClerkVerifySerializer(serializers.ModelSerializer):
             "field_values",
             "documents",
         ]
+
     def validate(self, attrs):
         gr_no = attrs.get("gr_no")
-        
-        if User.objects.filter(username = gr_no).exists():
-            raise serializers.ValidationError({
-                "meassage":"This student already created"
-            })
-            
+
+        if User.objects.filter(username=gr_no).exists():
+            raise serializers.ValidationError(
+                {"meassage": "This student already created"}
+            )
+
         return attrs
+
     def update(self, instance, validated_data):
 
         request = self.context.get("request")
@@ -1186,12 +1223,14 @@ class ClerkVerifySerializer(serializers.ModelSerializer):
             # =========================
             # 2. CREATE STUDENT
             # =========================
-           
+
             # Generate GR number
-            if StudentVerify.objects.filter(admission_number=instance.admission_number).exists():
-                raise serializers.ValidationError({
-                    "message":"This Student already created"
-                })
+            if StudentVerify.objects.filter(
+                admission_number=instance.admission_number
+            ).exists():
+                raise serializers.ValidationError(
+                    {"message": "This Student already created"}
+                )
 
             student = Student.objects.create(
                 school=self.context["request"].user.school,
@@ -1201,12 +1240,9 @@ class ClerkVerifySerializer(serializers.ModelSerializer):
                 gr_no=gr_no,
                 # details_done=True,
             )
-            
-            
+
             StudentVerify.objects.create(
-                gr_no = gr_no,
-                student = student,
-                clerk_verify = True
+                gr_no=gr_no, student=student, clerk_verify=True
             )
             # =========================
             # 3. MAP FIXED FIELDS
@@ -1273,7 +1309,7 @@ class ClerkVerifySerializer(serializers.ModelSerializer):
 
             # =========================
             # 7. CREATE PARENT USER
-            
+
             # =========================
             mobile = student.mobile
             last_six = str(mobile)[-6:]
@@ -1362,6 +1398,7 @@ class AssignClassSerializer(serializers.ModelSerializer):
         validated_data["school"] = school
         return super().create(validated_data)
 
+
 # ----------TO GET ADMISSION DATA TO TRUSTEE----------------
 class AdmissionDocumentReadSerializer(serializers.ModelSerializer):
     document_label = serializers.CharField(
@@ -1371,7 +1408,8 @@ class AdmissionDocumentReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdmissionDocument
         fields = ["id", "document_field", "document_label", "file"]
-        
+
+
 class GetAdmissionDataSerializer(serializers.ModelSerializer):
     field_values = AdmissionFieldValueReadSerializer(many=True, read_only=True)
     documents = AdmissionDocumentReadSerializer(many=True, read_only=True)
@@ -1386,6 +1424,8 @@ class GetAdmissionDataSerializer(serializers.ModelSerializer):
             "field_values",
             "documents",
         ]
+
+
 # =============================================================
 
 
@@ -2238,14 +2278,14 @@ class GetAnnouncementSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "description", "publish_at", "expires_at", "targets"]
 
 
-
 # =================FEE MANAGEMENT SERIALIZERS====================
+
 
 class FeeTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeeType
         fields = "__all__"
-        read_only_fields = ['school']
+        read_only_fields = ["school"]
 
 
 class AcademicYearSerializer(serializers.ModelSerializer):
@@ -2272,7 +2312,9 @@ class AcademicYearSerializer(serializers.ModelSerializer):
         return obj.get_billing_periods()
 
     def validate(self, attrs):
-        start_month = attrs.get("start_month", getattr(self.instance, "start_month", None))
+        start_month = attrs.get(
+            "start_month", getattr(self.instance, "start_month", None)
+        )
         end_month = attrs.get("end_month", getattr(self.instance, "end_month", None))
 
         if not self.instance and (start_month is None or end_month is None):
@@ -2283,9 +2325,14 @@ class AcademicYearSerializer(serializers.ModelSerializer):
                 }
             )
 
-        for field_name, month in [("start_month", start_month), ("end_month", end_month)]:
+        for field_name, month in [
+            ("start_month", start_month),
+            ("end_month", end_month),
+        ]:
             if month is not None and (month < 1 or month > 12):
-                raise serializers.ValidationError({field_name: "Month must be between 1 and 12."})
+                raise serializers.ValidationError(
+                    {field_name: "Month must be between 1 and 12."}
+                )
 
         return attrs
 
@@ -2323,7 +2370,9 @@ class FeeWiseClassSerializer(serializers.ModelSerializer):
         )
 
         if school and feetype and feetype.school_id != school.id:
-            raise serializers.ValidationError({"feetype": "Invalid fee type for this school."})
+            raise serializers.ValidationError(
+                {"feetype": "Invalid fee type for this school."}
+            )
 
         if school and school_class and school_class.school_id != school.id:
             raise serializers.ValidationError(
@@ -2333,11 +2382,16 @@ class FeeWiseClassSerializer(serializers.ModelSerializer):
         late_fee_enabled = attrs.get(
             "late_fee_enabled", getattr(self.instance, "late_fee_enabled", False)
         )
-        late_fee_type = attrs.get("late_fee_type", getattr(self.instance, "late_fee_type", None))
-        late_fee_amount = attrs.get(
-            "late_fee_amount", getattr(self.instance, "late_fee_amount", Decimal("0.00"))
+        late_fee_type = attrs.get(
+            "late_fee_type", getattr(self.instance, "late_fee_type", None)
         )
-        max_late_fee = attrs.get("max_late_fee", getattr(self.instance, "max_late_fee", None))
+        late_fee_amount = attrs.get(
+            "late_fee_amount",
+            getattr(self.instance, "late_fee_amount", Decimal("0.00")),
+        )
+        max_late_fee = attrs.get(
+            "max_late_fee", getattr(self.instance, "max_late_fee", None)
+        )
 
         if late_fee_enabled and not late_fee_type:
             raise serializers.ValidationError(
@@ -2430,7 +2484,9 @@ class StudentFeeSerializer(serializers.ModelSerializer):
 
     def get_student_name(self, obj):
         return " ".join(
-            filter(None, [obj.student.surname, obj.student.name, obj.student.father_name])
+            filter(
+                None, [obj.student.surname, obj.student.name, obj.student.father_name]
+            )
         )
 
     def get_school_class_name(self, obj):
@@ -2440,7 +2496,9 @@ class StudentFeeSerializer(serializers.ModelSerializer):
 
     def get_payments(self, obj):
         payments = obj.payments.order_by("-payment_date", "-created_at")
-        return StudentFeePaymentSerializer(payments, many=True, context=self.context).data
+        return StudentFeePaymentSerializer(
+            payments, many=True, context=self.context
+        ).data
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -2459,7 +2517,9 @@ class StudentFeeSerializer(serializers.ModelSerializer):
         )
 
         if school and student and student.school_id != school.id:
-            raise serializers.ValidationError({"student": "Invalid student for this school."})
+            raise serializers.ValidationError(
+                {"student": "Invalid student for this school."}
+            )
 
         if school and academic_year and academic_year.school_id != school.id:
             raise serializers.ValidationError(
@@ -2473,7 +2533,9 @@ class StudentFeeSerializer(serializers.ModelSerializer):
                 )
             if student and fee_wise_class.school_class_id != student.school_class_id:
                 raise serializers.ValidationError(
-                    {"fee_wise_class": "This fee is not configured for the student's class."}
+                    {
+                        "fee_wise_class": "This fee is not configured for the student's class."
+                    }
                 )
             feetype = fee_wise_class.feetype
             attrs["feetype"] = feetype
@@ -2486,7 +2548,9 @@ class StudentFeeSerializer(serializers.ModelSerializer):
             )
 
         if school and feetype and feetype.school_id != school.id:
-            raise serializers.ValidationError({"feetype": "Invalid fee type for this school."})
+            raise serializers.ValidationError(
+                {"feetype": "Invalid fee type for this school."}
+            )
 
         if feetype and feetype.billing_cycle == "monthly":
             if not billing_period:
@@ -2514,12 +2578,15 @@ class StudentFeeSerializer(serializers.ModelSerializer):
             due_date = attrs.get("due_date", getattr(self.instance, "due_date", None))
             if due_date and due_date.strftime("%Y-%m") != billing_period:
                 raise serializers.ValidationError(
-                    {"due_date": "Due date must be inside the selected billing period month."}
+                    {
+                        "due_date": "Due date must be inside the selected billing period month."
+                    }
                 )
 
         amount = attrs.get("amount", getattr(self.instance, "amount", Decimal("0.00")))
         discount_amount = attrs.get(
-            "discount_amount", getattr(self.instance, "discount_amount", Decimal("0.00"))
+            "discount_amount",
+            getattr(self.instance, "discount_amount", Decimal("0.00")),
         )
         discount_reference = attrs.get(
             "discount_reference", getattr(self.instance, "discount_reference", None)
@@ -2544,7 +2611,9 @@ class StudentFeeSerializer(serializers.ModelSerializer):
 
         if discount_amount > 0 and not discount_reference:
             raise serializers.ValidationError(
-                {"discount_reference": "Discount reference is required when discount is applied."}
+                {
+                    "discount_reference": "Discount reference is required when discount is applied."
+                }
             )
 
         if paid_amount > payable_amount:
@@ -2555,11 +2624,16 @@ class StudentFeeSerializer(serializers.ModelSerializer):
         late_fee_enabled = attrs.get(
             "late_fee_enabled", getattr(self.instance, "late_fee_enabled", False)
         )
-        late_fee_type = attrs.get("late_fee_type", getattr(self.instance, "late_fee_type", None))
-        late_fee_amount = attrs.get(
-            "late_fee_amount", getattr(self.instance, "late_fee_amount", Decimal("0.00"))
+        late_fee_type = attrs.get(
+            "late_fee_type", getattr(self.instance, "late_fee_type", None)
         )
-        max_late_fee = attrs.get("max_late_fee", getattr(self.instance, "max_late_fee", None))
+        late_fee_amount = attrs.get(
+            "late_fee_amount",
+            getattr(self.instance, "late_fee_amount", Decimal("0.00")),
+        )
+        max_late_fee = attrs.get(
+            "max_late_fee", getattr(self.instance, "max_late_fee", None)
+        )
 
         if late_fee_enabled and not late_fee_type:
             raise serializers.ValidationError(
@@ -2643,7 +2717,9 @@ class StudentFeePaymentSerializer(serializers.ModelSerializer):
 
     def get_student_name(self, obj):
         return " ".join(
-            filter(None, [obj.student.surname, obj.student.name, obj.student.father_name])
+            filter(
+                None, [obj.student.surname, obj.student.name, obj.student.father_name]
+            )
         )
 
     def get_balance_after_payment(self, obj):
@@ -2652,11 +2728,15 @@ class StudentFeePaymentSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         request = self.context.get("request")
         school = getattr(request.user, "school", None) if request else None
-        student_fee = attrs.get("student_fee", getattr(self.instance, "student_fee", None))
+        student_fee = attrs.get(
+            "student_fee", getattr(self.instance, "student_fee", None)
+        )
         amount = attrs.get("amount", getattr(self.instance, "amount", Decimal("0.00")))
 
         if not student_fee:
-            raise serializers.ValidationError({"student_fee": "Student fee is required."})
+            raise serializers.ValidationError(
+                {"student_fee": "Student fee is required."}
+            )
 
         if school and student_fee.school_id != school.id:
             raise serializers.ValidationError(
@@ -2671,17 +2751,20 @@ class StudentFeePaymentSerializer(serializers.ModelSerializer):
         student_fee.apply_late_fee()
 
         if amount <= 0:
-            raise serializers.ValidationError({"amount": "Amount must be greater than 0."})
+            raise serializers.ValidationError(
+                {"amount": "Amount must be greater than 0."}
+            )
 
         if self.instance and student_fee.pk != self.instance.student_fee_id:
             raise serializers.ValidationError(
-                {"student_fee": "Student fee cannot be changed after payment is created."}
+                {
+                    "student_fee": "Student fee cannot be changed after payment is created."
+                }
             )
 
-        paid_except_this = (
-            student_fee.payments.filter(is_verified=True).aggregate(total=Sum("amount"))["total"]
-            or Decimal("0.00")
-        )
+        paid_except_this = student_fee.payments.filter(is_verified=True).aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0.00")
         if self.instance:
             if self.instance.is_verified:
                 paid_except_this -= self.instance.amount
@@ -2689,7 +2772,9 @@ class StudentFeePaymentSerializer(serializers.ModelSerializer):
         remaining_amount = student_fee.payable_amount - paid_except_this
         if amount > remaining_amount:
             raise serializers.ValidationError(
-                {"amount": f"Amount cannot be greater than remaining balance {remaining_amount}."}
+                {
+                    "amount": f"Amount cannot be greater than remaining balance {remaining_amount}."
+                }
             )
 
         return attrs
@@ -2723,5 +2808,3 @@ class StudentFeePaymentSerializer(serializers.ModelSerializer):
         payment = super().update(instance, validated_data)
         payment.student_fee.refresh_payment_status()
         return payment
-
-

@@ -468,14 +468,13 @@ class SchoolView(ModelViewSet):
 
     # ✅ Cache-safe queryset
     def get_queryset(self):
-        cache_key = "school_list"
-        data = cache.get(cache_key)
+        # cache_key = "school_list"
+        # data = cache.get(cache_key)
 
-        if data:
-            return data
+      
 
         qs = School.objects.all()
-        cache.set(cache_key, qs, timeout=300)
+        # cache.set(cache_key, qs, timeout=300)
         return qs
 
     def perform_create(self, serializer):
