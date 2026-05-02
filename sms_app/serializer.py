@@ -198,10 +198,12 @@ class FeatureSerialzer(serializers.ModelSerializer):
 
 # -----------FOR SET WHICH FEATURE SCHOOL HAS-----------
 class SchoolFeatureSerializer(serializers.ModelSerializer):
+    feature_name = serializers.CharField(source="feature.name", read_only=True)
+
     class Meta:
         model = SchoolFeature
-        fields = "__all__"
-        read_only_fields = ["is_enabled"]
+        fields = ["id", "school", "feature", "feature_name", "is_enabled"]
+        read_only_fields = ["is_enabled", "feature_name"]
 
     def validate(self, data):
         school = data.get("school")
@@ -233,10 +235,12 @@ class ChangeFeatureStatusSerializer(serializers.ModelSerializer):
         
 
 class SchoolFeatureSerializer(serializers.ModelSerializer):
+    feature_name = serializers.CharField(source="feature.name", read_only=True)
+
     class Meta:
         model = SchoolFeature
-        fields = "__all__"
-        read_only_fields = ["is_enabled"]
+        fields = ["id", "school", "feature", "feature_name", "is_enabled"]
+        read_only_fields = ["is_enabled", "feature_name"]
 
 
 class SchoolSerializer(serializers.ModelSerializer):
