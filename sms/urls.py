@@ -106,18 +106,23 @@ router.register(r'tt_year', Tt_yearView, basename='tt_year')# For CLerk assign C
 router.register(r'time_table', Time_tableView, basename='time_table')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
 # router.register(r'tt_day', Tt_dayView, basename='tt_day')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
 router.register(r'tt_daytime', Tt_day_timeView, basename='tt_daytime')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
+#get student for principle with filter [school filter add remainig]
+router.register(r'get-student',GetStudentView,basename='get-student')# for 
 
-router.register(r'get-student',GetStudentView,basename='get-student')# for get student for principle with filter [school filter add remainig]
 router.register(r'attendance', AttendanceView, basename='attendance')# For attendance tracking METHOD [GET,POST,PUT,DELETE]
+
 router.register(r'leave-template', LeaveTemplateView, basename='leave-template')# For leave template tracking METHOD [GET,POST,PUT,DELETE]
 router.register(r'leave-request', LeaveRequestView, basename='leave-request')# 
 
 router.register(r'get-leave-requests', GetLeaveRequestView, basename='get-leave-requests')# For get leave request for principle with filter [school filter add remainig]
+
 router.register(r'change-leave-status', ChangeLeaveView, basename='change-leave-status')# For approve leave request for principle METHOD [PUT]
 router.register(r'announcements', AnnouncementView, basename='announcements')# For managing announcements
 router.register(r'get-announcements', GetAnnouncementView, basename='get-announcements')# For get announcement for student,staff with filter [school filter add remainig]   
 
+
 router.register(r'academic-year', AcademicYearViewSet, basename='academic-year')
+
 
 router.register(r'feetype', FeeTypeViewSet, basename='feetype')
 router.register(r'fee-wise-class', FeeWiseClassViewSet, basename='fee-wise-class')
@@ -132,12 +137,13 @@ urlpatterns = [
         
     path('api/refresh/',TokenRefreshView.as_view()),
     
-
-    path('api/get-location/', GetLocationView.as_view()), #for attendance location
-    
+    #FOR ATTENDANCE LOCATION
+    path('api/get-location/', GetLocationView.as_view()), 
     
     path('api/api-login/', LoginView.as_view()),
+    
     # path('school/<int:school_id>/', school_wise_report, name='school_wise_report'),
+    
     path('api/send-otp/', SendOTPView.as_view()),
     path('api/verify-otp/', VerifyOTPView.as_view()),
     
@@ -171,12 +177,14 @@ urlpatterns = [
     
     path('api/razor/order/',RazorpayOrderView.as_view()),
     path('api/payment/verify/',VerifyPaymentView.as_view()),
+    path('api/my-fees/', MyStudentFeeView.as_view()),
     path('api/student-fee/razor/order/', StudentFeeRazorpayOrderView.as_view()),
     path('api/student-fee/razor/verify/', StudentFeeRazorpayVerifyView.as_view()),
     path('api/offline/payment/',OffilinePaymentView.as_view()),
     path('api/get_receipt/<int:student_id>/<int:form_id>/',get_receipt),
     path('api/webhook/',RazorpayWebhookView.as_view()),
     
+    path('payfee/',TemplateView.as_view(template_name='textfee.html')),
      # Swagger UI
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0)),
 
@@ -186,7 +194,7 @@ urlpatterns = [
     # JSON/YAML schema
     re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0)),
 
-    
+   
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
  

@@ -1,3 +1,7 @@
+import math
+
+from os import name
+
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
@@ -182,7 +186,9 @@ class CustomeLoginSerializer(TokenObtainPairSerializer):
         user = self.user
 
         role = user.groups.values_list("name", flat=True)
+        
         data["roles"] = list(role)
+        
 
         return data
 
@@ -232,7 +238,8 @@ class ChangeFeatureStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchoolFeature
         fields = ["is_enabled"]
-        
+
+
 
 class SchoolFeatureSerializer(serializers.ModelSerializer):
     feature_name = serializers.CharField(source="feature.name", read_only=True)
@@ -286,7 +293,6 @@ class SchoolSerializer(serializers.ModelSerializer):
 
 
 class StaffSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Staff
         fields = "__all__"
@@ -309,6 +315,16 @@ class StaffSerializer(serializers.ModelSerializer):
             )
 
         return value
+    
+class ModuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Module
+        fields = '__all__'
+
+class ChangeModuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserModuleAccess
+        fields = '__all__'
 
 
 class GetTeacherSerializer(serializers.ModelSerializer):
@@ -1041,16 +1057,25 @@ class AdmissionDocumentUpdateSerializer(serializers.ModelSerializer):
 
 
 # =================get submited data for tem user====================
+
 class AdmissionFieldValueReadSerializer(serializers.ModelSerializer):
     field_label = serializers.CharField(source="field.label", read_only=True)
+    field_order = serializers.IntegerField(source="field.order", read_only=True)
 
     class Meta:
         model = AdmissionFieldValue
-        fields = ["id", "field", "field_label", "value"]
+        fields = ["id", "field", "field_label", "field_order", "value"]
+
+
+class AdmissionSectionWiseReadSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    order = serializers.IntegerField()
+    field_values = AdmissionFieldValueReadSerializer(many=True)
 
 
 class TempUserAdmissionDataSerializer(serializers.ModelSerializer):
-    field_values = AdmissionFieldValueReadSerializer(many=True, read_only=True)
+    sections = serializers.SerializerMethodField()
 
     # school_class = serializers.SerializerMethodField()
 
@@ -1064,8 +1089,36 @@ class TempUserAdmissionDataSerializer(serializers.ModelSerializer):
             "status",
             # "school_class",
             # "division",
-            "field_values",
+            "sections",
         ]
+
+    def get_sections(self, obj):
+        section_map = {}
+
+        field_values = obj.field_values.all().select_related("field", "field__section")
+
+        for field_value in field_values:
+            section = field_value.field.section
+
+            if section.id not in section_map:
+                section_map[section.id] = {
+                    "id": section.id,
+                    "title": section.title,
+                    "order": section.order,
+                    "field_values": [],
+                }
+
+            section_map[section.id]["field_values"].append(field_value)
+
+        sections = sorted(section_map.values(), key=lambda item: item["order"])
+
+        for section in sections:
+            section["field_values"] = sorted(
+                section["field_values"],
+                key=lambda field_value: field_value.field.order,
+            )
+
+        return AdmissionSectionWiseReadSerializer(sections, many=True).data
 
     # Extract school_class from dynamic fields
     def get_school_class(self, obj):
@@ -1853,7 +1906,6 @@ class AttendanceLocationSerializer(serializers.ModelSerializer):
         return AttendanceLocation.objects.create(school=school, **validated_data)
 
 
-import math
 
 
 def is_inside_radius(lat1, lon1, lat2, lon2, radius_meters):
@@ -1953,9 +2005,8 @@ class AttendanceSerializer(serializers.ModelSerializer):
         latitude = validated_data.pop("latitude", None)
         longitude = validated_data.pop("longitude", None)
 
-        attendance_location = AttendanceLocation.objects.filter(
-            school=school.id
-        ).first()
+        attendance_location = AttendanceLocation.objects.filter(school=school.id).first()
+        
         loc_latitude = attendance_location.latitude
         loc_longitude = attendance_location.longitude
         loc_radius = attendance_location.radius
@@ -2296,6 +2347,45 @@ class FeeTypeSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ["school"]
 
+    def normalize_fee_name(self, name):
+        words = re.findall(r"[a-z0-9]+", name.lower())
+        normalized_words = []
+
+        for word in words:
+            if word.endswith("ies") and len(word) > 3:
+                word = f"{word[:-3]}y"
+            elif word.endswith("s") and len(word) > 3:
+                word = word[:-1]
+            normalized_words.append(word)
+
+        return " ".join(normalized_words)
+
+    def validate(self, attrs):
+        name = attrs.get("name", getattr(self.instance, "name", None))
+        billing_cycle = attrs.get(
+            "billing_cycle", getattr(self.instance, "billing_cycle", None)
+        )
+        request = self.context.get("request")
+        school = getattr(request.user, "school", None) if request else None
+
+        if not name or not str(name).strip():
+            raise serializers.ValidationError({"name": "Fee type name is required."})
+
+        normalized_name = self.normalize_fee_name(str(name).strip())
+        queryset = FeeType.objects.filter(school=school, billing_cycle=billing_cycle)
+
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+
+        for fee_type in queryset:
+            if self.normalize_fee_name(fee_type.name or "") == normalized_name:
+                raise serializers.ValidationError(
+                    {
+                        "name": "This fee type already exists for this billing cycle."
+                    }
+                )
+
+        return attrs
 
 class AcademicYearSerializer(serializers.ModelSerializer):
     month_numbers = serializers.SerializerMethodField()
@@ -2388,6 +2478,30 @@ class FeeWiseClassSerializer(serializers.ModelSerializer):
                 {"school_class": "Invalid class for this school."}
             )
 
+        if not feetype:
+            raise serializers.ValidationError({"feetype": "Fee type is required."})
+
+        if not school_class:
+            raise serializers.ValidationError(
+                {"school_class": "School class is required."}
+            )
+
+        existing = FeeWiseClass.objects.filter(
+            school=school,
+            feetype=feetype,
+            school_class=school_class,
+        )
+
+        if self.instance:
+            existing = existing.exclude(pk=self.instance.pk)
+
+        if existing.exists():
+            raise serializers.ValidationError(
+                {
+                    "message": "This fee type is already configured for this class."
+                }
+            )
+
         late_fee_enabled = attrs.get(
             "late_fee_enabled", getattr(self.instance, "late_fee_enabled", False)
         )
@@ -2426,6 +2540,7 @@ class StudentFeeSerializer(serializers.ModelSerializer):
         queryset=FeeType.objects.all(), required=False
     )
     feetype_name = serializers.CharField(source="feetype.name", read_only=True)
+    fee_wise_class = serializers.PrimaryKeyRelatedField(read_only=True)
     school_class = serializers.IntegerField(
         source="student.school_class_id", read_only=True
     )
@@ -2517,9 +2632,6 @@ class StudentFeeSerializer(serializers.ModelSerializer):
         academic_year = attrs.get(
             "academic_year", getattr(self.instance, "academic_year", None)
         )
-        fee_wise_class = attrs.get(
-            "fee_wise_class", getattr(self.instance, "fee_wise_class", None)
-        )
         feetype = attrs.get("feetype", getattr(self.instance, "feetype", None))
         billing_period = attrs.get(
             "billing_period", getattr(self.instance, "billing_period", "")
@@ -2535,31 +2647,40 @@ class StudentFeeSerializer(serializers.ModelSerializer):
                 {"academic_year": "Invalid academic year for this school."}
             )
 
-        if fee_wise_class:
-            if school and fee_wise_class.school_id != school.id:
-                raise serializers.ValidationError(
-                    {"fee_wise_class": "Invalid fee amount setup for this school."}
-                )
-            if student and fee_wise_class.school_class_id != student.school_class_id:
-                raise serializers.ValidationError(
-                    {
-                        "fee_wise_class": "This fee is not configured for the student's class."
-                    }
-                )
-            feetype = fee_wise_class.feetype
-            attrs["feetype"] = feetype
-            if attrs.get("amount") is None:
-                attrs["amount"] = fee_wise_class.amount
+        if not student:
+            raise serializers.ValidationError({"student": "Student is required."})
 
         if not feetype:
             raise serializers.ValidationError(
-                {"feetype": "Fee type is required when fee_wise_class is not provided."}
+                {"feetype": "Fee type is required."}
             )
 
         if school and feetype and feetype.school_id != school.id:
             raise serializers.ValidationError(
                 {"feetype": "Invalid fee type for this school."}
             )
+
+        if not student.school_class_id:
+            raise serializers.ValidationError(
+                {"student": "Student does not have a class assigned."}
+            )
+
+        fee_wise_class = FeeWiseClass.objects.filter(
+            school=school,
+            feetype=feetype,
+            school_class_id=student.school_class_id,
+        ).first()
+
+        if not fee_wise_class:
+            raise serializers.ValidationError(
+                {
+                    "feetype": "This fee type is not configured for the student's class."
+                }
+            )
+
+        attrs["fee_wise_class"] = fee_wise_class
+        if attrs.get("amount") is None:
+            attrs["amount"] = fee_wise_class.amount
 
         if feetype and feetype.billing_cycle == "monthly":
             if not billing_period:

@@ -31,12 +31,15 @@ Response includes valid months:
     "2027-03"
   ]
 }
+
 Create Fee Type
 POST /api/feetype/
+
 {
   "name": "Tuition Fee",
   "billing_cycle": "monthly"
 }
+
 Billing cycle options:
 
 single, monthly, quarterly, half_yearly, yearly
@@ -88,6 +91,7 @@ For single fee:
   "billing_period": "",
   "due_date": "2026-04-10"
 }
+
 Add Discount
 PATCH /api/student-fee/1/
 {
@@ -102,6 +106,7 @@ GET /api/student-fee/?school_class=2
 GET /api/student-fee/?academic_year=1
 GET /api/student-fee/?status=pending
 GET /api/student-fee/?billing_period=2026-04
+
 Response includes:
 
 {
@@ -113,6 +118,7 @@ Response includes:
   "balance_amount": "1400.00",
   "payments": []
 }
+
 Formula:
 
 actual_payable_amount = amount + fine_amount - discount_amount
@@ -123,6 +129,7 @@ Full remaining amount:
 {
   "student_fee": 1
 }
+
 Partial amount:
 
 {
@@ -136,6 +143,8 @@ POST /api/student-fee/razor/verify/
   "razorpay_payment_id": "pay_xxxxx",
   "razorpay_signature": "signature_xxxxx"
 }
+
+
 Offline Payment
 POST /api/student-fee-payment/
 {
@@ -146,6 +155,7 @@ POST /api/student-fee-payment/
   "note": "Paid at office",
   "is_verified": true
 }
+
 Payment modes:
 
 cash, online, cheque, bank_transfer, upi
@@ -164,3 +174,73 @@ PATCH /api/student-fee/1/
 Status options:
 
 pending, partial, paid, cancelled
+
+
+
+TO get fee list from student side 
+
+api/my-fees/
+
+
+
+[
+    {
+        "id": 1,
+        "school": 1,
+        "academic_year": 1,
+        "student": 4,
+        "student_name": "Father Name Here",
+        "school_class": 2,
+        "school_class_name": "Class 2",
+        "feetype": 3,
+        "feetype_name": "Tuition Fee",
+        "fee_wise_class": 3,
+        "billing_period": "2026-05",
+        "amount": "1500.00",
+        "discount_amount": "0.00",
+        "discount_reference": null,
+        "discount_note": null,
+        "late_fee_enabled": true,
+        "grace_days": 5,
+        "late_fee_type": "per_day",
+        "late_fee_amount": "20.00",
+        "max_late_fee": "500.00",
+        "fine_amount": "0.00",
+        "paid_amount": "1500.00",
+        "payable_amount": "1500.00",
+        "actual_payable_amount": "1500.00",
+        "balance_amount": "0.00",
+        "due_date": null,
+        "status": "paid",
+        "payment_mode": "online",
+        "transaction_id": "pay_SkOlw57JtKfU0S",
+        "payments": [
+            {
+                "id": 1,
+                "school": 1,
+                "student_fee": 1,
+                "student": 4,
+                "student_name": "Father Name Here",
+                "feetype": 3,
+                "feetype_name": "Tuition Fee",
+                "amount": "1500.00",
+                "payment_mode": "online",
+                "transaction_id": "pay_SkOlw57JtKfU0S",
+                "razorpay_order_id": "order_SkOlKAJramp8qZ",
+                "razorpay_payment_id": "pay_SkOlw57JtKfU0S",
+                "razorpay_signature": "e2543339223f5b5faa904b1afe8174f3f0834f1d6b96eb0cec1c21f6913bdea5",
+                "receipt_number": "RZP-1",
+                "payment_date": "2026-05-02T06:35:27.559833Z",
+                "note": null,
+                "collected_by": 7,
+                "is_verified": true,
+                "verified_by": 7,
+                "verified_at": "2026-05-02T06:35:27.559827Z",
+                "balance_after_payment": 0.0,
+                "created_at": "2026-05-02T06:34:34.474815Z"
+            }
+        ],
+        "created_at": "2026-05-02T06:21:26.877406Z",
+        "paid_at": "2026-05-02T06:35:28.592182Z"
+    }
+]

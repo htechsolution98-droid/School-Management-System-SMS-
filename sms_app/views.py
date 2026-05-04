@@ -219,6 +219,7 @@ def send_otp_email(email, otp, user_name=None):
         "otp_email.html", {"otp": otp, "user_name": user_name}
     )
 
+
     email_message = EmailMultiAlternatives(
         subject=subject,
         body=f"Your OTP is {otp}",  # fallback (plain text)
@@ -319,20 +320,43 @@ class LoginView(APIView):
         # 🎟 JWT Token
         refresh = RefreshToken.for_user(user)
 
-        # 👥 Roles from Groups
+        # Roles from Groups
         roles = list(user.groups.values_list("name", flat=True))
-
+        modules = UserModuleAccess.objects.filter(
+            user=user.id
+        ).values_list("module__code", flat=True)
+        
+        user = User.objects.filter(id = user.id).first()
+        
         return Response(
             {
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
+                "school_id":user.school.id,
+                "school_slug":user.school.slug,
                 "roles": roles,
+                "modules":modules
             },
             status=status.HTTP_200_OK,
         )
-
+        
+class ModuleView(ModelViewSet):
+    queryset = Module.objects.all()
+    serializer_class = ModuleSerializer
+    
+    def get_queryset(self):
+        school = self.user.school
+        school_feature = SchoolFeature.objects.filter(school = school, is_enabled = True)
+        
+        return super().get_queryset()
+class ChangeModuleView(ModelViewSet):
+    queryset = UserModuleAccess.objects.all()
+    serializer_class = ChangeFeatureStatusSerializer
+    http_method_names = ["get","post","delete" ]
+    
 
 # =========PERMISSIONS===========
+
 class Is_super_admin(BasePermission):
     def has_permission(self, request, view):
         return (
@@ -423,6 +447,7 @@ class HasModuleAccess(BasePermission):
             module__code=module_code,
             module__is_active=True
         ).exists()
+        
 
 
 class FeatureView(ModelViewSet):
@@ -435,7 +460,7 @@ class FeatureView(ModelViewSet):
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
         return Response({"message": "Feature created successfully"}, status=201)
-    
+
     
 class SchoolFeatureView(ModelViewSet):
     queryset = SchoolFeature.objects.all()
@@ -478,8 +503,6 @@ class SchoolView(ModelViewSet):
     def get_queryset(self):
         # cache_key = "school_list"
         # data = cache.get(cache_key)
-
-      
 
         qs = School.objects.all()
         # cache.set(cache_key, qs, timeout=300)
@@ -572,39 +595,48 @@ class StaffView(ModelViewSet):
             {"message": "Staff created successfully"}, status=status.HTTP_201_CREATED
         )
 
-    # 🔹 Create staff + clear cache
+    # Create staff + clear cache
     def perform_create(self, serializer):
         name = serializer.validated_data.get("name")
-        category = serializer.validated_data.get("category")
+        category = serializer.validated_data.pop("category")
         email = serializer.validated_data.get("email")
         mobile = serializer.validated_data.get("mobile")
 
         if not email and not mobile:
             raise serializers.ValidationError("Provide email or mobile for staff user")
-
-        group, created = Group.objects.get_or_create(name=category)
+        category = int(category)
+        
+        cat = Feature.objects.filter(id = category).first()
+        
+        group, created = Group.objects.get_or_create(name=cat.name)
 
         username = generate_staff_username(name)
-
-        user = User(username=username)
-        user.school = self.request.user.school
-        user.role = category
-        user.email = email if email else None
-        user.mobile = mobile if mobile else None
         
-        user.set_password("123456")
-        user.save()
+        with transaction.atomic():  
+            user = User(username=username)
+            user.school = self.request.user.school
+            user.role = category
+            user.email = email if email else None
+            user.mobile = mobile if mobile else None
+            
+            user.set_password("123456")
+            user.save()
 
-        user.groups.add(group)
+            user.groups.add(group)
+            print(category)
+            
+            modules = Module.objects.filter(for_role = category)
+            
+            print(modules)
+            for m in modules:
+                UserModuleAccess.objects.create(user = user,module = m)
 
-        school = School.objects.filter(login_id=self.request.user).first()
+            school = School.objects.filter(login_id=self.request.user).first()
 
-        serializer.save(user=user, school=school)
+        serializer.save(user=user, school=school, category=cat.name)
 
-        # 🔥 Clear cache after create
-        cache.delete(f"staff_list_{self.request.user.id}")
 
-    # 🔹 Update staff + clear cache
+
     def perform_update(self, serializer):
         serializer.save()
         cache.delete(f"staff_list_{self.request.user.id}")
@@ -694,7 +726,11 @@ class TempUserAdmissionViewSet(ReadOnlyModelViewSet):
     serializer_class = TempUserAdmissionDataSerializer
 
     def get_queryset(self):
-        return Admission.objects.filter(temp_user=self.request.user)
+        return (
+            Admission.objects.filter(temp_user=self.request.user)
+            .select_related("school", "form")
+            .prefetch_related("field_values__field__section")
+        )
 
 # ----------TO GET ADMISSION DATA TO TRUSTEE----------------
 class AdmissionReadOnlyViewSet(ReadOnlyModelViewSet):
@@ -880,6 +916,7 @@ class FormFieldViewSet(RetrieveAPIView):
     permission_classes = [IsAuthenticated, IsTempUser]
 
     def get_queryset(self):
+        
         school = self.request.user.school
 
         # Only active forms, read-only single record
@@ -1892,7 +1929,6 @@ class AttendanceView(ModelViewSet):
             {"message": "Attendance Added successfully", "data": response.data},
             status=status.HTTP_201_CREATED,
         )
-        #     return Attendance.objects.filter()
 
 
 class LeaveTemplateView(ModelViewSet):
@@ -2260,7 +2296,7 @@ class FeeWiseClassViewSet(ModelViewSet):
 class StudentFeeViewSet(ModelViewSet):
     queryset = StudentFee.objects.all()
     serializer_class = StudentFeeSerializer
-    permission_classes = [IsAuthenticated, IsFeeManager]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         queryset = StudentFee.objects.filter(
@@ -2297,6 +2333,49 @@ class StudentFeeViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(school=self.request.user.school)
+
+
+class MyStudentFeeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        student = Student.objects.filter(user=request.user).first()
+
+        if not student:
+            return Response(
+                {"error": "Student profile not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        queryset = StudentFee.objects.filter(student=student).select_related(
+            "academic_year",
+            "student",
+            "student__school_class",
+            "feetype",
+            "fee_wise_class",
+        ).prefetch_related("payments")
+
+        status_value = request.query_params.get("status")
+        academic_year = request.query_params.get("academic_year")
+        billing_period = request.query_params.get("billing_period")
+
+        if status_value:
+            queryset = queryset.filter(status=status_value)
+        if academic_year:
+            queryset = queryset.filter(academic_year_id=academic_year)
+        if billing_period is not None:
+            queryset = queryset.filter(billing_period=billing_period)
+
+        student_fees = list(queryset.order_by("-created_at"))
+        for student_fee in student_fees:
+            student_fee.apply_late_fee()
+
+        serializer = StudentFeeSerializer(
+            student_fees,
+            many=True,
+            context={"request": request},
+        )
+        return Response(serializer.data)
 
 
 class StudentFeePaymentViewSet(ModelViewSet):

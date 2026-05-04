@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Student Fee Payment</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial;
+        }
+
+        .container {
+            background: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            width: 350px;
+        }
+
+        input, button {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        button {
+            background: #3399cc;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        .msg {
+            text-align: center;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+    <h2>Pay Fee</h2>
+
+    <input type="number" id="studentFee" value="1">
+    <input type="number" id="amount" placeholder="Optional amount">
+
+    <button id="payBtn">Pay Now</button>
+
+    <div id="message" class="msg"></div>
+</div>
+
+<script>
+const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc3NzA3MTk0LCJpYXQiOjE3Nzc3MDM1OTUsImp0aSI6Ijg5YWFiNTRkODdkNTRjMTQ5ZmUxMGJkNTA5NTA2YTg1IiwidXNlcl9pZCI6IjcifQ.4QYcRu2aLmPUGdz9cB8PW9Hg_s0hTNqwY5HQ6DYj4QQ";  // 🔴 Keep full token here
+
+document.getElementById("payBtn").addEventListener("click", async function () {
+
+    const studentFee = document.getElementById("studentFee").value;
+    const amount = document.getElementById("amount").value;
+
+    let payload = { student_fee: studentFee };
+    if (amount) payload.amount = amount;
+
+    try {
+        // 🔹 CREATE ORDER
+        const response = await fetch("http://127.0.0.1:8000/api/student-fee/razor/order/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + TOKEN   // ✅ TOKEN ADDED
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || "Order failed");
+        }
+
+        var options = {
+            key: data.key,
+            amount: data.amount,
+            currency: data.currency,
+            order_id: data.order_id,
+
+            handler: async function (res) {
+
+                // 🔹 VERIFY PAYMENT
+                const verifyRes = await fetch("http://127.0.0.1:8000/api/student-fee/razor/verify/", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + TOKEN   // ✅ TOKEN ADDED
+                    },
+                    body: JSON.stringify({
+                        razorpay_order_id: res.razorpay_order_id,
+                        razorpay_payment_id: res.razorpay_payment_id,
+                        razorpay_signature: res.razorpay_signature
+                    })
+                });
+
+                const verifyData = await verifyRes.json();
+
+                if (verifyData.status === "success") {
+                    showMsg("Payment Success ✅", true);
+                } else {
+                    showMsg("Verification Failed ❌", false);
+                }
+            }
+        };
+
+        var rzp = new Razorpay(options);
+
+        rzp.on('payment.failed', function () {
+            showMsg("Payment Failed ❌", false);
+        });
+
+        rzp.open();
+
+    } catch (err) {
+        console.error(err);
+        showMsg(err.message, false);
+    }
+});
+
+function showMsg(msg, success) {
+    const el = document.getElementById("message");
+    el.innerText = msg;
+    el.style.color = success ? "green" : "red";
+}
+</script>
+
+</body>
+</html>

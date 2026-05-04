@@ -84,10 +84,12 @@ class SchoolFeature(models.Model):
 
 
 # ------------MODUL LIST------------
+
 class Module(models.Model):
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=50, unique=True)  # e.g. STUDENT, FEES
     description = models.TextField(blank=True, null=True)
+    for_role = models.ForeignKey(Feature, on_delete=models.CASCADE, null=True, blank=True ) 
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -99,10 +101,12 @@ class Module(models.Model):
 
 
 # -------------USER ACCESS MODUL--------
+
 class UserModuleAccess(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="module_access"
     )
+    
     module = models.ForeignKey(
         Module, on_delete=models.CASCADE, related_name="user_access"
     )
@@ -797,6 +801,7 @@ class Attendance(models.Model):
     category = models.CharField(max_length=20, null=True, blank=True)
     date_time = models.DateTimeField(null=True, blank=True)
     is_present = models.BooleanField(default=False)
+
 
     def __str__(self):
         return f"{self.name} - {self.date}"
