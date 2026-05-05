@@ -72,6 +72,7 @@ from rest_framework import status
 # from .serializers import DocumentS
 
 from django.core.cache import cache
+from rest_framework import generics
 
 import pandas as pd
 from datetime import datetime
@@ -332,23 +333,42 @@ class LoginView(APIView):
             {
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
-                "school_id":user.school.id,
-                "school_slug":user.school.slug,
+                "school_id":user.school.id or None,
+                "school_slug":user.school.slug or None,
                 "roles": roles,
                 "modules":modules
             },
             status=status.HTTP_200_OK,
         )
+
+        
+class UserListView(generics.ListAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserListSerialzer
+    
+    def get_queryset(self):
+        school = self.request.user.school
+        return User.objects.filter(school = school)
+        
         
 class ModuleView(ModelViewSet):
     queryset = Module.objects.all()
     serializer_class = ModuleSerializer
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        school = self.user.school
-        school_feature = SchoolFeature.objects.filter(school = school, is_enabled = True)
-        
-        return super().get_queryset()
+        school = self.request.user.school
+        enabled_feature_ids = SchoolFeature.objects.filter(
+            school=school,
+            is_enabled=True,
+        ).values_list("feature_id", flat=True)
+
+        return Module.objects.filter(
+            for_role_id__in=enabled_feature_ids,
+            is_active=True,
+        )
+
+
 class ChangeModuleView(ModelViewSet):
     queryset = UserModuleAccess.objects.all()
     serializer_class = ChangeFeatureStatusSerializer
@@ -655,7 +675,7 @@ class GetTeacherView(ModelViewSet):
 
     def get_queryset(self):
         school = self.request.user.school
-        return Staff.objects.filter(school=school, user__groups__name="TEACHER")
+        return Staff.objects.filter(school=school, user__groups__name="Teacher")
 
 # =============TO ask more=========
 

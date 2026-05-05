@@ -234,6 +234,8 @@ class GetFeatureSerializer(serializers.ModelSerializer):
 
 from rest_framework import serializers
 
+
+
 class ChangeFeatureStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchoolFeature
@@ -316,6 +318,11 @@ class StaffSerializer(serializers.ModelSerializer):
 
         return value
     
+class UserListSerialzer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = '__all__'
+
 class ModuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Module

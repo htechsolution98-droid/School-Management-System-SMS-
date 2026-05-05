@@ -47,6 +47,9 @@ router.register(r'schoolfeature',SchoolFeatureView, basename='schoolfeature')
 router.register(r'getfeature',GetFeatureView, basename='getfeature')
 router.register(r'changefeaturestatus',ChangeFeatureStatusVIew, basename='changefeaturestatus')
 
+# TO GET MODULE THAT SCHOOL ASSIGN 
+router.register(r'getmodule',ModuleView,basename='getmodule')
+
 router.register(r'SchoolView',SchoolView, basename='SchoolView') # DONE
 router.register(r'StaffView',StaffView, basename='StaffView') # DONE
 # router.register(r'studentSignUp',StudentSignUpView, basename='studentSignUp') # On Changing
@@ -87,6 +90,7 @@ router.register(r'updateDocument', AdmissionDocumentViewSet, basename='updateDoc
 
 # =================VERIFY API================= 
 # Add GR Number --create student -create perents -create student,perent user
+
 router.register(r'clerk_verify', ClerkVerifyView, basename='ClerkVerifyView') 
 
 router.register(r'PrincipleVerifyView', PrincipleVerifyView, basename='PrincipleVerifyView')
@@ -99,7 +103,7 @@ router.register(r'divisionSet', SetDivisionView, basename='divisionSet') #For Cl
 router.register(r'syllabus', SyllabusView, basename='syllabus') # For CLerk add syllabus METHOD [GET,POST,PUT,DELETE]   ----API Need---  api/schoolclass , setSubject for drop down
 router.register(r'getteacher', GetTeacherView, basename='getteacher') # For teacher dwop down METHOD [GET]
 
-router.register(r'assignClass', AssignClassView, basename='assignClass')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
+router.register(r'assignClass', AssignClassView, basename='assignClass') # For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
 
 # ========= TIME TABLE ROUTER ============
 router.register(r'tt_year', Tt_yearView, basename='tt_year')# For CLerk assign Class METHOD [GET,POST,PUT,DELETE] ----API Need---  api/divisionSet/ , api/setSubject/ , api/getteacher/  for drop down
