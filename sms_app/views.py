@@ -1,5 +1,3 @@
-
-
 from rest_framework.permissions import BasePermission
 from .models import UserModuleAccess
 
@@ -220,7 +218,6 @@ def send_otp_email(email, otp, user_name=None):
         "otp_email.html", {"otp": otp, "user_name": user_name}
     )
 
-
     email_message = EmailMultiAlternatives(
         subject=subject,
         body=f"Your OTP is {otp}",  # fallback (plain text)
@@ -285,7 +282,7 @@ class SendOTPView(APIView):
         # )
 
         return Response(
-            {"message": "OTP sent successfully", "otp": otp}  # ⚠️ remove in production
+            {"message": "OTP sent successfully", "otp": otp}  # remove in production
         )
 
 
@@ -323,39 +320,39 @@ class LoginView(APIView):
 
         # Roles from Groups
         roles = list(user.groups.values_list("name", flat=True))
-        modules = UserModuleAccess.objects.filter(
-            user=user.id
-        ).values_list("module__code", flat=True)
-        
-        user = User.objects.filter(id = user.id).first()
-        
+        modules = UserModuleAccess.objects.filter(user=user.id).values_list(
+            "module__code", flat=True
+        )
+
+        user = User.objects.filter(id=user.id).first()
+
         return Response(
             {
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
-                "school_id":user.school.id or None,
-                "school_slug":user.school.slug or None,
+                "school_id": user.school.id if user.school else None,
+                "school_slug": user.school.slug if user.school else None,
                 "roles": roles,
-                "modules":modules
+                "modules": modules,
             },
             status=status.HTTP_200_OK,
         )
 
-        
+
 class UserListView(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = UserListSerialzer
-    
+
     def get_queryset(self):
         school = self.request.user.school
-        return User.objects.filter(school = school)
-        
-        
+        return User.objects.filter(school=school)
+
+
 class ModuleView(ModelViewSet):
     queryset = Module.objects.all()
     serializer_class = ModuleSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         school = self.request.user.school
         enabled_feature_ids = SchoolFeature.objects.filter(
@@ -372,10 +369,11 @@ class ModuleView(ModelViewSet):
 class ChangeModuleView(ModelViewSet):
     queryset = UserModuleAccess.objects.all()
     serializer_class = ChangeFeatureStatusSerializer
-    http_method_names = ["get","post","delete" ]
-    
+    http_method_names = ["get", "post", "delete"]
+
 
 # =========PERMISSIONS===========
+
 
 class Is_super_admin(BasePermission):
     def has_permission(self, request, view):
@@ -441,7 +439,7 @@ class IsTempUser(BasePermission):
 
 
 class HasModuleAccess(BasePermission):
-    """ 
+    """
     Allows access if user is mapped to module
     """
 
@@ -463,56 +461,55 @@ class HasModuleAccess(BasePermission):
             raise AttributeError("module_code is required in the view")
 
         return UserModuleAccess.objects.filter(
-            user=user,
-            module__code=module_code,
-            module__is_active=True
+            user=user, module__code=module_code, module__is_active=True
         ).exists()
-        
 
 
 class FeatureView(ModelViewSet):
     queryset = Feature.objects.all()
     serializer_class = FeatureSerialzer
-    permission_classes = [IsAuthenticated,Is_super_admin]
-    
-    http_method_names = ["get" ,"post", "delete"]
-    
+    permission_classes = [IsAuthenticated, Is_super_admin]
+
+    http_method_names = ["get", "post", "delete"]
+
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
         return Response({"message": "Feature created successfully"}, status=201)
 
-    
+
 class SchoolFeatureView(ModelViewSet):
     queryset = SchoolFeature.objects.all()
     serializer_class = SchoolFeatureSerializer
-    permission_classes = [IsAuthenticated,Is_super_admin]
-    
-    
+    permission_classes = [IsAuthenticated, Is_super_admin]
+
+
 class GetFeatureView(ModelViewSet):
     queryset = SchoolFeature.objects.all()
     serializer_class = GetFeatureSerializer
-    permission_classes = [IsAuthenticated,Is_admin_trustee]
+    permission_classes = [IsAuthenticated, Is_admin_trustee]
 
     http_method_names = ["get"]
 
     def get_queryset(self):
         school = self.request.user.school
-        return SchoolFeature.objects.filter(school = school,is_enabled = True)
-    
-    
+        return SchoolFeature.objects.filter(school=school, is_enabled=True)
+
+
 class ChangeFeatureStatusVIew(ModelViewSet):
     queryset = SchoolFeature.objects.all()
     serializer_class = ChangeFeatureStatusSerializer
-    permission_classes = [IsAuthenticated,Is_super_admin]
+    permission_classes = [IsAuthenticated, Is_super_admin]
     http_method_names = ["patch"]
-    lookup_field = "id" 
-    
+    lookup_field = "id"
+
+
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
 
 from django.db import transaction
 from django.core.cache import cache
 from rest_framework import serializers
+
 
 class SchoolView(ModelViewSet):
     queryset = School.objects.all()
@@ -557,11 +554,7 @@ class SchoolView(ModelViewSet):
 
             # ✅ Bulk create school features
             school_features = [
-                SchoolFeature(
-                    school=school,
-                    feature=feature,
-                    is_enabled=True
-                )
+                SchoolFeature(school=school, feature=feature, is_enabled=True)
                 for feature in features
             ]
 
@@ -625,37 +618,35 @@ class StaffView(ModelViewSet):
         if not email and not mobile:
             raise serializers.ValidationError("Provide email or mobile for staff user")
         category = int(category)
-        
-        cat = Feature.objects.filter(id = category).first()
-        
+
+        cat = Feature.objects.filter(id=category).first()
+
         group, created = Group.objects.get_or_create(name=cat.name)
 
         username = generate_staff_username(name)
-        
-        with transaction.atomic():  
+
+        with transaction.atomic():
             user = User(username=username)
             user.school = self.request.user.school
             user.role = category
             user.email = email if email else None
             user.mobile = mobile if mobile else None
-            
+
             user.set_password("123456")
             user.save()
 
             user.groups.add(group)
             print(category)
-            
-            modules = Module.objects.filter(for_role = category)
-            
+
+            modules = Module.objects.filter(for_role=category)
+
             print(modules)
             for m in modules:
-                UserModuleAccess.objects.create(user = user,module = m)
+                UserModuleAccess.objects.create(user=user, module=m)
 
             school = School.objects.filter(login_id=self.request.user).first()
 
         serializer.save(user=user, school=school, category=cat.name)
-
-
 
     def perform_update(self, serializer):
         serializer.save()
@@ -676,6 +667,7 @@ class GetTeacherView(ModelViewSet):
     def get_queryset(self):
         school = self.request.user.school
         return Staff.objects.filter(school=school, user__groups__name="Teacher")
+
 
 # =============TO ask more=========
 
@@ -752,6 +744,7 @@ class TempUserAdmissionViewSet(ReadOnlyModelViewSet):
             .prefetch_related("field_values__field__section")
         )
 
+
 # ----------TO GET ADMISSION DATA TO TRUSTEE----------------
 class AdmissionReadOnlyViewSet(ReadOnlyModelViewSet):
     serializer_class = GetAdmissionDataSerializer
@@ -762,11 +755,12 @@ class AdmissionReadOnlyViewSet(ReadOnlyModelViewSet):
 
         # Multi-tenant safety (VERY IMPORTANT for your SaaS)
         return Admission.objects.filter(school=user.school).prefetch_related(
-            "field_values",
-            "documents"
+            "field_values", "documents"
         )
-        
+
+
 # ==========================================================
+
 
 class ClerkVerifyView(ModelViewSet):
     queryset = Admission.objects.all()
@@ -936,7 +930,7 @@ class FormFieldViewSet(RetrieveAPIView):
     permission_classes = [IsAuthenticated, IsTempUser]
 
     def get_queryset(self):
-        
+
         school = self.request.user.school
 
         # Only active forms, read-only single record
@@ -1007,24 +1001,23 @@ class Admission_link(APIView):
         # Invalid link
         if not form:
             return Response(
-                {"message": "Invalid admission link"},
-                status=status.HTTP_404_NOT_FOUND
+                {"message": "Invalid admission link"}, status=status.HTTP_404_NOT_FOUND
             )
 
         # Block if form is inactive
         if not form.is_active:
             return Response(
                 {"message": "Admission form is closed"},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Return school details
         return Response(
             {
-                "school_id": form.school.id,   # use .id not object
-                "school_slug": form.school.slug
+                "school_id": form.school.id,  # use .id not object
+                "school_slug": form.school.slug,
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )
 
 
@@ -1060,7 +1053,7 @@ class DocumentSubmissionView(ModelViewSet):
 
         documents = []
         i = 0
-        
+
         while True:
             document_field = data.get(f"documents[{i}][document_field]")
             file = data.get(f"documents[{i}][file]")
@@ -1080,7 +1073,6 @@ class DocumentSubmissionView(ModelViewSet):
             "admission_number": data.get("admission_number"),
             "documents": documents,
         }
-        
 
         serializer = self.get_serializer(data=final_data)
         serializer.is_valid(raise_exception=True)
@@ -1176,8 +1168,6 @@ class CheckMobileAPIView(APIView):
             {"status": "new", "message": "Mobile number is available"},
             status=status.HTTP_200_OK,
         )
-
-
 
 
 class RazorpayOrderView(APIView):
@@ -2260,7 +2250,6 @@ class upload_students(APIView):
         )
 
 
-
 # ============FEE MANAGEMENT VIEW==============
 
 
@@ -2280,12 +2269,12 @@ class FeeTypeViewSet(ModelViewSet):
     queryset = FeeType.objects.all()
     serializer_class = FeeTypeSerializer
     permission_classes = [IsAuthenticated, IsCLerk]
-    
+
     def get_queryset(self):
-        return FeeType.objects.filter(school =  self.request.user.school)
-    
+        return FeeType.objects.filter(school=self.request.user.school)
+
     def perform_create(self, serializer):
-        school =  self.request.user.school
+        school = self.request.user.school
         serializer.save(school=school)
 
 
@@ -2319,15 +2308,17 @@ class StudentFeeViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = StudentFee.objects.filter(
-            school=self.request.user.school
-        ).select_related(
-            "academic_year",
-            "student",
-            "student__school_class",
-            "feetype",
-            "fee_wise_class",
-        ).prefetch_related("payments")
+        queryset = (
+            StudentFee.objects.filter(school=self.request.user.school)
+            .select_related(
+                "academic_year",
+                "student",
+                "student__school_class",
+                "feetype",
+                "fee_wise_class",
+            )
+            .prefetch_related("payments")
+        )
 
         student = self.request.query_params.get("student")
         school_class = self.request.query_params.get("school_class")
@@ -2367,13 +2358,17 @@ class MyStudentFeeView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        queryset = StudentFee.objects.filter(student=student).select_related(
-            "academic_year",
-            "student",
-            "student__school_class",
-            "feetype",
-            "fee_wise_class",
-        ).prefetch_related("payments")
+        queryset = (
+            StudentFee.objects.filter(student=student)
+            .select_related(
+                "academic_year",
+                "student",
+                "student__school_class",
+                "feetype",
+                "fee_wise_class",
+            )
+            .prefetch_related("payments")
+        )
 
         status_value = request.query_params.get("status")
         academic_year = request.query_params.get("academic_year")
@@ -2462,9 +2457,9 @@ def get_student_fee_for_online_payment(user, student_fee_id):
     if not school:
         raise StudentFee.DoesNotExist
 
-    student_fee = StudentFee.objects.select_related(
-        "student", "feetype", "school"
-    ).get(id=student_fee_id, school=school)
+    student_fee = StudentFee.objects.select_related("student", "feetype", "school").get(
+        id=student_fee_id, school=school
+    )
     return student_fee, school
 
 
@@ -2500,7 +2495,9 @@ class StudentFeeRazorpayOrderView(APIView):
                 request.user, student_fee_id
             )
         except StudentFee.DoesNotExist:
-            return Response({"error": "Student fee not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Student fee not found"}, status=status.HTTP_404_NOT_FOUND
+            )
 
         if student_fee.status == "cancelled":
             return Response(
@@ -2511,7 +2508,11 @@ class StudentFeeRazorpayOrderView(APIView):
         student_fee.apply_late_fee()
 
         try:
-            amount = Decimal(str(requested_amount)) if requested_amount else student_fee.balance_amount
+            amount = (
+                Decimal(str(requested_amount))
+                if requested_amount
+                else student_fee.balance_amount
+            )
         except Exception:
             return Response(
                 {"error": "Invalid amount"},
@@ -2524,7 +2525,9 @@ class StudentFeeRazorpayOrderView(APIView):
             )
         if amount > student_fee.balance_amount:
             return Response(
-                {"error": f"Amount cannot be greater than remaining balance {student_fee.balance_amount}"},
+                {
+                    "error": f"Amount cannot be greater than remaining balance {student_fee.balance_amount}"
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -2599,7 +2602,9 @@ class StudentFeeRazorpayVerifyView(APIView):
                 order_id,
             )
         except StudentFeePayment.DoesNotExist:
-            return Response({"error": "Payment order not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Payment order not found"}, status=status.HTTP_404_NOT_FOUND
+            )
 
         if payment.is_verified:
             return Response(
