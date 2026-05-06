@@ -244,3 +244,162 @@ api/my-fees/
         "paid_at": "2026-05-02T06:35:28.592182Z"
     }
 ]
+
+
+
+
+
+
+
+
+----------------- ATTENDANCE  TO SALARY FLOW --------------------------
+
+Clerk/admin sets school latitude-longitude and timing rule.
+
+POST /api/get-location/
+Payload:
+
+{
+  "latitude": "23.123456",
+  "longitude": "72.123456",
+  "radius": "100",
+  "start_time": "09:00:00",
+  "end_time": "17:00:00",
+  "half_day_time": "13:00:00"
+}
+This creates:
+
+AttendanceLocation
+AttendanceTimeRule
+2. Staff Check-In
+
+Staff sends current latitude-longitude.
+
+POST /api/attendance/
+Payload:
+
+{
+  "latitude": "23.123456",
+  "longitude": "72.123456"
+}
+First request of the day:
+
+saves check_in
+checks location radius
+if check-in after start_time, marks is_half_day = true
+3. Staff Check-Out
+
+Same API, same payload:
+
+POST /api/attendance/
+Payload:
+
+{
+  "latitude": "23.123456",
+  "longitude": "72.123456"
+}
+Second request of the day:
+
+saves check_out
+checks location radius
+if checkout before end_time, marks is_half_day = true
+4. Create Salary Component
+
+Clerk creates earning/deduction heads.
+
+POST /api/salary-component/
+Earning example:
+
+{
+  "name": "HRA",
+  "component_type": "earning",
+  "is_active": true
+}
+Deduction example:
+
+{
+  "name": "PF",
+  "component_type": "deduction",
+  "is_active": true
+}
+5. Assign Component To Staff
+
+POST /api/staff-salary-component/
+Fixed earning/deduction:
+
+{
+  "staff": 1,
+  "component": 2,
+  "calculation_type": "fixed",
+  "value": "1500.00",
+  "is_active": true
+}
+Percentage earning/deduction:
+
+{
+  "staff": 1,
+  "component": 3,
+  "calculation_type": "percentage",
+  "value": "10.00",
+  "is_active": true
+}
+6. Generate/Pay Staff Salary
+
+Clerk generates salary for staff for month.
+
+POST /api/staff-salary-payment/
+Offline payment:
+
+{
+  "staff": 1,
+  "salary_month": "2026-05",
+  "payment_mode": "offline",
+  "receipt_number": "SAL-2026-05-001",
+  "note": "May salary paid by cash"
+}
+Online payment:
+
+{
+  "staff": 1,
+  "salary_month": "2026-05",
+  "payment_mode": "online",
+  "transaction_id": "TXN123456",
+  "receipt_number": "SAL-2026-05-001",
+  "note": "May salary paid online"
+}
+System automatically calculates:
+
+basic salary from Staff.salary
+full month working days
+absent days from missing attendance
+half days from Attendance.is_half_day
+attendance deduction
+salary components
+net salary
+paid amount
+7. Get Salary Payments
+
+All salary payments:
+
+GET /api/staff-salary-payment/
+Staff-wise:
+
+GET /api/staff-salary-payment/?staff=1
+Month-wise:
+
+GET /api/staff-salary-payment/?salary_month=2026-05
+Online/offline filter:
+
+GET /api/staff-salary-payment/?payment_mode=online
+Status filter:
+
+GET /api/staff-salary-payment/?payment_status=paid
+Full Flow Short
+
+Clerk sets school lat/long + time rule
+Staff check-in/check-out using lat/long
+Clerk creates salary components
+Clerk assigns components to staff
+Clerk generates salary for month
+System checks attendance and components
+System stores final StaffSalaryPayment

@@ -1,4 +1,5 @@
 import math
+import calendar
 
 from os import name
 
@@ -12,7 +13,7 @@ import re
 from rest_framework import serializers
 from django.contrib.auth.hashers import check_password
 from django.utils import timezone
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from xml.parsers.expat import model
 from rest_framework import serializers
@@ -226,10 +227,11 @@ class SchoolFeatureSerializer(serializers.ModelSerializer):
 class GetFeatureSerializer(serializers.ModelSerializer):
 
     feature_name = serializers.CharField(source="feature.name", read_only=True)
+    feature_id =  serializers.CharField(source="feature.id", read_only=True)
 
     class Meta:
         model = SchoolFeature
-        fields = ["id", "feature_name"]
+        fields = ["feature_id", "feature_name"]
 
 
 from rest_framework import serializers
@@ -1438,6 +1440,8 @@ class SyllabusSerializer(serializers.ModelSerializer):
         read_only_fields = ["school"]
 
 
+# NEED VALIDATION OF SAME SUBJECT AS SAME DIVISION
+# --------ASSIGN CLASS-------
 class AssignClassSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssignClass
@@ -1459,7 +1463,7 @@ class AssignClassSerializer(serializers.ModelSerializer):
                 school=school, teacher=teacher, is_class_teacher=True
             ).exists():
                 raise serializers.ValidationError("Teacher already assigned")
-
+            
         return data
 
     def create(self, validated_data):
@@ -1881,9 +1885,16 @@ class GetStudentSerializer(serializers.ModelSerializer):
 
 
 class AttendanceLocationSerializer(serializers.ModelSerializer):
+    start_time = serializers.TimeField(write_only=True, required=False, allow_null=True)
+    end_time = serializers.TimeField(write_only=True, required=False, allow_null=True)
+    half_day_time = serializers.TimeField(
+        write_only=True, required=False, allow_null=True
+    )
+
     class Meta:
         model = AttendanceLocation
         fields = [
+            "id",
             "latitude",
             "longitude",
             "radius",
@@ -1893,22 +1904,36 @@ class AttendanceLocationSerializer(serializers.ModelSerializer):
             "half_day_time",
         ]
         read_only_fields = ["school"]
+    def validate(self, attrs):
+        request = self.context.get("request")   
+        school = request.user.school
+        
+        if AttendanceLocation.objects.filter(school = school ).exists():
+           raise serializers.ValidationError({
+               "massage":"You already add school attendance location"
+           })
+           
+        return super().validate(attrs)
 
     def create(self, validated_data):
         request = self.context.get("request")
+        if not request or not hasattr(request, "user"):
+            raise serializers.ValidationError("Request user is required.")
 
-        start_time = request.data.get("start_time")
-        end_time = request.data.get("end_time")
-        half_day_time = request.data.get("half_day_time")
+        school = getattr(request.user, "school", None)
+        if not school:
+            raise serializers.ValidationError("User school is not configured.")
+
+        start_time = validated_data.pop("start_time", None)
+        end_time = validated_data.pop("end_time", None)
+        half_day_time = validated_data.pop("half_day_time", None)
 
         AttendanceTimeRule.objects.create(
-            school=request.user.school,
+            school=school,
             start_time=start_time,
             end_time=end_time,
             half_day_time=half_day_time,
         )
-
-        school = request.user.school
 
         return AttendanceLocation.objects.create(school=school, **validated_data)
 
@@ -1935,6 +1960,14 @@ def is_inside_radius(lat1, lon1, lat2, lon2, radius_meters):
     return distance <= radius_meters
 
 
+def is_after_time(current_time, rule_time):
+    return bool(rule_time and current_time > rule_time)
+
+
+def is_before_time(current_time, rule_time):
+    return bool(rule_time and current_time < rule_time)
+
+
 class AttendanceSerializer(serializers.ModelSerializer):
 
     latitude = serializers.CharField(write_only=True)
@@ -1943,14 +1976,34 @@ class AttendanceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Attendance
-        fields = ["latitude", "longitude"]
-        read_only_fields = [
+        fields = [
+            "id",
+            "latitude",
+            "longitude",
             "school",
             "staff",
+            "attendance_date",
             "date_time",
             "name",
             "category",
             "is_present",
+            "is_half_day",
+            "check_in",
+            "check_out",
+        ]
+        
+        read_only_fields = [
+            "id",
+            "school",
+            "staff",
+            "attendance_date",
+            "date_time",
+            "name",
+            "category",
+            "is_present",
+            "is_half_day",
+            "check_in",
+            "check_out",
         ]
 
     def validate_latitude(self, value):
@@ -1996,10 +2049,13 @@ class AttendanceSerializer(serializers.ModelSerializer):
                 "Staff profile not found for current user."
             )
 
-        today = timezone.now().date()
-        if Attendance.objects.filter(staff=staff, date_time__date=today).exists():
+        today = timezone.localdate()
+        attendance = Attendance.objects.filter(
+            staff=staff, attendance_date=today
+        ).first()
+        if attendance and attendance.check_out:
             raise serializers.ValidationError(
-                "Attendance has already been recorded for today."
+                "Check-out has already been recorded for today."
             )
 
         return attrs
@@ -2013,7 +2069,7 @@ class AttendanceSerializer(serializers.ModelSerializer):
         longitude = validated_data.pop("longitude", None)
 
         attendance_location = AttendanceLocation.objects.filter(school=school.id).first()
-        
+
         loc_latitude = attendance_location.latitude
         loc_longitude = attendance_location.longitude
         loc_radius = attendance_location.radius
@@ -2032,15 +2088,45 @@ class AttendanceSerializer(serializers.ModelSerializer):
             )
 
         staff = Staff.objects.filter(user=user).first()
-        validated_data["staff"] = staff
-        validated_data["school"] = school
-        validated_data["category"] = staff.category
-        # validated_data['name'] = staff.name
+        attendance_rule = AttendanceTimeRule.objects.filter(school=school).first()
+        now = timezone.localtime()
+        current_time = now.time()
 
-        validated_data["is_present"] = True
-        validated_data["date_time"] = timezone.now()
+        with transaction.atomic():
+            today = timezone.localdate()
+            rule_start_time = attendance_rule.start_time if attendance_rule else None
+            attendance, created = Attendance.objects.select_for_update().get_or_create(
+                staff=staff,
+                attendance_date=today,
+                defaults={
+                    "school": school,
+                    "category": staff.category,
+                    "name": staff.name,
+                    "is_present": True,
+                    "date_time": now,
+                    "check_in": now,
+                    "is_half_day": is_after_time(current_time, rule_start_time),
+                },
+            )
 
-        return Attendance.objects.create(**validated_data)
+            if not created:
+                if attendance.check_out:
+                    raise serializers.ValidationError(
+                        "Check-out has already been recorded for today."
+                    )
+
+                attendance.check_out = now
+                update_fields = ["check_out"]
+
+                rule_end_time = attendance_rule.end_time if attendance_rule else None
+                if is_before_time(current_time, rule_end_time):
+                    attendance.is_half_day = True
+                    update_fields.append("is_half_day")
+
+                attendance.save(update_fields=update_fields)
+                return attendance
+
+            return attendance
 
 
 class LeaveTemplateSerializer(serializers.ModelSerializer):
@@ -2539,6 +2625,444 @@ class FeeWiseClassSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+
+class SalaryComponentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SalaryComponent
+        fields = [
+            "id",
+            "school",
+            "name",
+            "component_type",
+            "is_active",
+        ]
+        read_only_fields = ["school"]
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Component name cannot be empty.")
+        return value
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        school = getattr(request.user, "school", None) if request else None
+        name = attrs.get("name", getattr(self.instance, "name", None))
+        component_type = attrs.get(
+            "component_type", getattr(self.instance, "component_type", None)
+        )
+
+        if not school:
+            raise serializers.ValidationError("User school is not configured.")
+
+        existing = SalaryComponent.objects.filter(
+            school=school,
+            name__iexact=name,
+            component_type=component_type,
+        )
+        if self.instance:
+            existing = existing.exclude(pk=self.instance.pk)
+        if existing.exists():
+            raise serializers.ValidationError(
+                {"message": "This salary component already exists for this school."}
+            )
+
+        return attrs
+
+
+class StaffSalaryComponentSerializer(serializers.ModelSerializer):
+    staff_name = serializers.CharField(source="staff.name", read_only=True)
+    component_name = serializers.CharField(source="component.name", read_only=True)
+    component_type = serializers.CharField(
+        source="component.component_type", read_only=True
+    )
+
+    class Meta:
+        model = StaffSalaryComponent
+        fields = [
+            "id",
+            "staff",
+            "staff_name",
+            "component",
+            "component_name",
+            "component_type",
+            "calculation_type",
+            "value",
+            "is_active",
+        ]
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        school = getattr(request.user, "school", None) if request else None
+        staff = attrs.get("staff", getattr(self.instance, "staff", None))
+        component = attrs.get("component", getattr(self.instance, "component", None))
+        calculation_type = attrs.get(
+            "calculation_type", getattr(self.instance, "calculation_type", None)
+        )
+        value = attrs.get("value", getattr(self.instance, "value", None))
+
+        if not school:
+            raise serializers.ValidationError("User school is not configured.")
+
+        if not staff:
+            raise serializers.ValidationError({"staff": "Staff is required."})
+        if staff.school_id != school.id:
+            raise serializers.ValidationError(
+                {"staff": "Invalid staff for this school."}
+            )
+
+        if not component:
+            raise serializers.ValidationError(
+                {"component": "Salary component is required."}
+            )
+        if component.school_id != school.id:
+            raise serializers.ValidationError(
+                {"component": "Invalid salary component for this school."}
+            )
+
+        if value is not None and value <= 0:
+            raise serializers.ValidationError(
+                {"value": "Value must be greater than 0."}
+            )
+
+        if calculation_type == "percentage" and value and value > 100:
+            raise serializers.ValidationError(
+                {"value": "Percentage value cannot be greater than 100."}
+            )
+
+        existing = StaffSalaryComponent.objects.filter(
+            staff=staff,
+            component=component,
+        )
+        if self.instance:
+            existing = existing.exclude(pk=self.instance.pk)
+        if existing.exists():
+            raise serializers.ValidationError(
+                {"message": "This component is already assigned to this staff."}
+            )
+
+        return attrs
+
+
+class StaffSalaryPaymentSerializer(serializers.ModelSerializer):
+    staff_name = serializers.CharField(read_only=True)
+    staff_category = serializers.CharField(read_only=True)
+    paid_by_username = serializers.CharField(source="paid_by.username", read_only=True)
+
+    class Meta:
+        model = StaffSalaryPayment
+        fields = [
+            "id",
+            "school",
+            "staff",
+            "staff_name",
+            "staff_category",
+            "salary_month",
+            "basic_salary",
+            "total_earnings",
+            "total_deductions",
+            "working_days",
+            "present_days",
+            "absent_days",
+            "half_days",
+            "attendance_deduction",
+            "component_snapshot",
+            "net_salary",
+            "paid_amount",
+            "payment_mode",
+            "payment_status",
+            "transaction_id",
+            "receipt_number",
+            "payment_date",
+            "note",
+            "paid_by",
+            "paid_by_username",
+            "working_days",
+            "present_days",
+            "absent_days",
+            "half_days",
+            "attendance_deduction",
+            "component_snapshot",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "school",
+            "staff_name",
+            "staff_category",
+            "paid_by",
+            "paid_by_username",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate_salary_month(self, value):
+        if not re.match(r"^\d{4}-\d{2}$", value):
+            raise serializers.ValidationError(
+                "Salary month must be in YYYY-MM format."
+            )
+
+        month = int(value.split("-")[1])
+        if month < 1 or month > 12:
+            raise serializers.ValidationError("Salary month must be valid.")
+
+        return value
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        school = getattr(request.user, "school", None) if request else None
+        staff = attrs.get("staff", getattr(self.instance, "staff", None))
+        salary_month = attrs.get(
+            "salary_month", getattr(self.instance, "salary_month", None)
+        )
+        basic_salary = attrs.get(
+            "basic_salary", getattr(self.instance, "basic_salary", Decimal("0.00"))
+        )
+        total_earnings = attrs.get(
+            "total_earnings",
+            getattr(self.instance, "total_earnings", Decimal("0.00")),
+        )
+        total_deductions = attrs.get(
+            "total_deductions",
+            getattr(self.instance, "total_deductions", Decimal("0.00")),
+        )
+        net_salary = attrs.get("net_salary", getattr(self.instance, "net_salary", None))
+        paid_amount = attrs.get(
+            "paid_amount", getattr(self.instance, "paid_amount", None)
+        )
+        payment_mode = attrs.get(
+            "payment_mode", getattr(self.instance, "payment_mode", None)
+        )
+        transaction_id = attrs.get(
+            "transaction_id", getattr(self.instance, "transaction_id", None)
+        )
+
+        if not school:
+            raise serializers.ValidationError("User school is not configured.")
+
+        if not staff:
+            raise serializers.ValidationError({"staff": "Staff is required."})
+        if staff.school_id != school.id:
+            raise serializers.ValidationError(
+                {"staff": "Invalid staff for this school."}
+            )
+
+        for field_name, amount in [
+            ("basic_salary", basic_salary),
+            ("total_earnings", total_earnings),
+            ("total_deductions", total_deductions),
+            ("net_salary", net_salary),
+            ("paid_amount", paid_amount),
+        ]:
+            if amount is not None and amount < 0:
+                raise serializers.ValidationError(
+                    {field_name: "Amount cannot be negative."}
+                )
+
+        if net_salary is None:
+            raise serializers.ValidationError({"net_salary": "Net salary is required."})
+
+        if paid_amount is None:
+            raise serializers.ValidationError(
+                {"paid_amount": "Paid amount is required."}
+            )
+
+        if paid_amount > net_salary:
+            raise serializers.ValidationError(
+                {"paid_amount": "Paid amount cannot be greater than net salary."}
+            )
+
+        if payment_mode == "online" and not transaction_id:
+            raise serializers.ValidationError(
+                {"transaction_id": "Transaction ID is required for online payment."}
+            )
+
+        existing = StaffSalaryPayment.objects.filter(
+            staff=staff,
+            salary_month=salary_month,
+        )
+        if self.instance:
+            existing = existing.exclude(pk=self.instance.pk)
+        if existing.exists():
+            raise serializers.ValidationError(
+                {"message": "Salary payment already exists for this staff and month."}
+            )
+
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        user = request.user if request and request.user.is_authenticated else None
+
+        if not validated_data.get("payment_date"):
+            validated_data["payment_date"] = timezone.now()
+        if user:
+            validated_data["paid_by"] = user
+
+        return super().create(validated_data)
+
+
+class GenerateStaffSalaryPaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StaffSalaryPayment
+        fields = [
+            "staff",
+            "salary_month",
+            "payment_mode",
+            "transaction_id",
+            "receipt_number",
+            "payment_status",
+            "payment_date",
+            "note",
+        ]
+
+    def validate_salary_month(self, value):
+        if not re.match(r"^\d{4}-\d{2}$", value):
+            raise serializers.ValidationError(
+                "Salary month must be in YYYY-MM format."
+            )
+
+        month = int(value.split("-")[1])
+        if month < 1 or month > 12:
+            raise serializers.ValidationError("Salary month must be valid.")
+
+        return value
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        school = getattr(request.user, "school", None) if request else None
+        staff = attrs.get("staff")
+        payment_mode = attrs.get("payment_mode")
+        transaction_id = attrs.get("transaction_id")
+
+        if not school:
+            raise serializers.ValidationError("User school is not configured.")
+
+        if staff.school_id != school.id:
+            raise serializers.ValidationError(
+                {"staff": "Invalid staff for this school."}
+            )
+
+        if payment_mode == "online" and not transaction_id:
+            raise serializers.ValidationError(
+                {"transaction_id": "Transaction ID is required for online payment."}
+            )
+
+        if StaffSalaryPayment.objects.filter(
+            staff=staff, salary_month=attrs.get("salary_month")
+        ).exists():
+            raise serializers.ValidationError(
+                {"message": "Salary payment already exists for this staff and month."}
+            )
+
+        return attrs
+
+    def calculate_component_amount(self, component, basic_salary):
+        if component.calculation_type == "percentage":
+            return (basic_salary * component.value / Decimal("100")).quantize(
+                Decimal("0.01")
+            )
+
+        return component.value
+
+    @transaction.atomic
+    def create(self, validated_data):
+        request = self.context.get("request")
+        user = request.user if request and request.user.is_authenticated else None
+        staff = validated_data["staff"]
+        salary_month = validated_data["salary_month"]
+
+        year, month = [int(part) for part in salary_month.split("-")]
+        working_days = calendar.monthrange(year, month)[1]
+        month_start = date(year, month, 1)
+        month_end = date(year, month, working_days)
+
+        basic_salary = staff.salary or Decimal("0.00")
+        per_day_salary = (
+            basic_salary / Decimal(working_days) if working_days else Decimal("0.00")
+        )
+
+        attendance_qs = Attendance.objects.filter(
+            staff=staff,
+            attendance_date__gte=month_start,
+            attendance_date__lte=month_end,
+        )
+        present_count = attendance_qs.filter(
+            is_present=True, is_half_day=False
+        ).count()
+        half_days = attendance_qs.filter(is_present=True, is_half_day=True).count()
+        absent_days = max(working_days - present_count - half_days, 0)
+        present_days = Decimal(present_count) + (Decimal(half_days) / Decimal("2"))
+        attendance_deduction = (
+            (Decimal(absent_days) * per_day_salary)
+            + (Decimal(half_days) * per_day_salary / Decimal("2"))
+        ).quantize(Decimal("0.01"))
+
+        total_earnings = Decimal("0.00")
+        component_deductions = Decimal("0.00")
+        component_snapshot = []
+
+        staff_components = StaffSalaryComponent.objects.filter(
+            staff=staff,
+            is_active=True,
+            component__is_active=True,
+        ).select_related("component")
+
+        for staff_component in staff_components:
+            amount = self.calculate_component_amount(staff_component, basic_salary)
+            component_type = staff_component.component.component_type
+
+            if component_type == "earning":
+                total_earnings += amount
+            else:
+                component_deductions += amount
+
+            component_snapshot.append(
+                {
+                    "component_id": staff_component.component_id,
+                    "name": staff_component.component.name,
+                    "component_type": component_type,
+                    "calculation_type": staff_component.calculation_type,
+                    "value": str(staff_component.value),
+                    "amount": str(amount),
+                }
+            )
+
+        total_deductions = (component_deductions + attendance_deduction).quantize(
+            Decimal("0.01")
+        )
+        net_salary = (basic_salary + total_earnings - total_deductions).quantize(
+            Decimal("0.01")
+        )
+
+        if net_salary < 0:
+            net_salary = Decimal("0.00")
+
+        payment = StaffSalaryPayment.objects.create(
+            staff=staff,
+            salary_month=salary_month,
+            basic_salary=basic_salary,
+            total_earnings=total_earnings.quantize(Decimal("0.01")),
+            total_deductions=total_deductions,
+            working_days=working_days,
+            present_days=present_days,
+            absent_days=absent_days,
+            half_days=half_days,
+            attendance_deduction=attendance_deduction,
+            component_snapshot=component_snapshot,
+            net_salary=net_salary,
+            paid_amount=net_salary,
+            payment_mode=validated_data["payment_mode"],
+            payment_status=validated_data.get("payment_status", "paid"),
+            transaction_id=validated_data.get("transaction_id"),
+            receipt_number=validated_data.get("receipt_number"),
+            payment_date=validated_data.get("payment_date") or timezone.now(),
+            note=validated_data.get("note"),
+            paid_by=user,
+        )
+
+        return payment
 
 
 class StudentFeeSerializer(serializers.ModelSerializer):

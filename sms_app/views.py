@@ -514,7 +514,7 @@ from rest_framework import serializers
 class SchoolView(ModelViewSet):
     queryset = School.objects.all()
     serializer_class = SchoolSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,Is_super_admin]
 
     # ✅ Cache-safe queryset
     def get_queryset(self):
@@ -783,7 +783,8 @@ class PrincipleVerifyView(ModelViewSet):
     serializer_class = PrincipleVerifySerializr
 
     def get_queryset(self):
-        return Student.objects.filter(clerk_verified=True)
+        school = self.request.user.school
+        return Student.objects.filter(clerk_verified=True,school = school)
 
 
 # ======Fee Verify View =============
@@ -1114,6 +1115,7 @@ class AdmissionUpdateViewSet(ModelViewSet):
 class AdmissionDocumentViewSet(ModelViewSet):
     queryset = Admission.objects.all()
     lookup_field = "admission_number"
+    permission_classes = [IsAuthenticated,IsCLerk]
 
     def get_queryset(self):
         return Admission.objects.filter(school=self.request.user.school)
@@ -1534,7 +1536,7 @@ from django.core.cache import cache
 class SetSubjectView(ModelViewSet):
     queryset = Subject.objects.all()
     serializer_class = SetSubjectSerializer
-    # permission_classes = [IsAuthenticated, IsCLerk]
+    permission_classes = [IsAuthenticated, IsCLerk]
 
     def get_queryset(self):
         return Subject.objects.filter(school=self.request.user.school)
@@ -1671,7 +1673,7 @@ class SyllabusView(ModelViewSet):
         # school_class = instance.SchoolClass_id
 
         # ✅ Clear cache
-        cache.delete(f"syllabus_{school_id}_all")
+        # cache.delete(f"syllabus_{school_id}_all")
         # cache.delete(f"syllabus_{school_id}_{school_class}")
 
         return Response(
@@ -1763,12 +1765,21 @@ class AssignClassView(ModelViewSet):
 class Tt_yearView(ModelViewSet):
     queryset = Tt_year.objects.all()
     serializer_class = Tt_yearSerializer
+    permission_classes  = [IsAuthenticated,IsCLerk]
+    
+    def get_queryset(self):
+        school = self.request.user.school
+        return Tt_year.objects.filter(school = school)
 
 
 class Time_tableView(ModelViewSet):
     queryset = Tt_year.objects.all()
     serializer_class = Time_tableSerializer
-
+    permission_classes = [IsAuthenticated,IsCLerk]
+    
+    def get_queryset(self):
+        school = self.request.user.school
+        return Tt_year.objects.filter(school = school)
 
 # class Tt_dayView(ModelViewSet):
 #     queryset = Tt_day.objects.all()
@@ -1912,12 +1923,13 @@ class GetStudentView(ModelViewSet):
 
 
 class GetLocationView(APIView):
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated,IsCLerk]
 
     def post(self, request):
         serializer = AttendanceLocationSerializer(
             data=request.data, context={"request": request}
         )
+        
         if serializer.is_valid():
             serializer.save()
             return Response(
@@ -1968,6 +1980,7 @@ class GetLeaveRequestView(ModelViewSet):
         queryset = LeaveRequest.objects.filter(school=self.request.user.school)
 
         return queryset
+
 
 
 class ChangeLeaveView(ModelViewSet):
@@ -2025,18 +2038,18 @@ class GetAnnouncementView(ModelViewSet):
             Q(expires_at__gte=now) | Q(expires_at__isnull=True)
         )
 
-        # 1️⃣ ALL users
+        # ALL users
         # all_filter = Q(targets__target_type='ALL')
 
-        # 2️⃣ SPECIFIC user
+        # SPECIFIC user
         specific_filter = Q(targets__target_type="SPECIFIC", targets__target_id=user.id)
 
-        # 3️⃣ ROLE-based
+        # ROLE-based
         user_groups = user.groups.values_list("id", flat=True)
         print(user_groups)
         role_filter = Q(targets__target_type="ROLE", targets__target_id__in=user_groups)
 
-        # 4️⃣ CLASS-based (only if student)
+        # 4️ CLASS-based (only if student)
         class_filter = Q()
         if hasattr(user, "student"):
             class_filter = Q(
@@ -2079,6 +2092,7 @@ from rest_framework.permissions import IsAuthenticated
 # ----------------------------
 # Helpers
 # ----------------------------
+
 def parse_date(value):
     try:
         return pd.to_datetime(value).date() if pd.notna(value) else None
@@ -2094,7 +2108,7 @@ def clean(value):
 # Column Mapping (Excel → Model)
 # ----------------------------
 COLUMN_MAPPING = {
-    "GR No": "gr_no",  # ✅ add this
+    "GR No": "gr_no",  # add this
     "Surname": "surname",
     "Student Name": "name",
     "Father's Name": "father_name",
@@ -2179,7 +2193,7 @@ def import_students_from_excel(file, school_id, use_bulk=True):
             # ----------------------------
             student = Student(
                 school=school,
-                gr_no=gr_no,  # ✅ important
+                gr_no=gr_no,  # important
                 surname=data["surname"],
                 name=data["name"],
                 father_name=data["father_name"],
@@ -2196,17 +2210,17 @@ def import_students_from_excel(file, school_id, use_bulk=True):
                 remarks=data["remarks"],
                 mobile=data["mobile"],
             )
-
+            
             students.append(student)
 
         except Exception as e:
             errors.append(f"Row {index+2}: {str(e)}")
 
     # ----------------------------
-    # 🚨 STOP if any error
+    # STOP if any error
     # ----------------------------
     if errors:
-        # ❌ rollback automatically due to atomic
+        # rollback automatically due to atomic
         return {"created": 0, "errors": errors}
 
     # ----------------------------
@@ -2300,6 +2314,93 @@ class FeeWiseClassViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(school=self.request.user.school)
+
+
+class SalaryComponentViewSet(ModelViewSet):
+    queryset = SalaryComponent.objects.all()
+    serializer_class = SalaryComponentSerializer
+    permission_classes = [IsAuthenticated, IsCLerk]
+
+    def get_queryset(self):
+        queryset = SalaryComponent.objects.filter(school=self.request.user.school)
+
+        component_type = self.request.query_params.get("component_type")
+        is_active = self.request.query_params.get("is_active")
+
+        if component_type:
+            queryset = queryset.filter(component_type=component_type)
+        if is_active in ["true", "false"]:
+            queryset = queryset.filter(is_active=is_active == "true")
+
+        return queryset.order_by("name")
+
+    def perform_create(self, serializer):
+        serializer.save(school=self.request.user.school)
+
+
+class StaffSalaryComponentViewSet(ModelViewSet):
+    queryset = StaffSalaryComponent.objects.all()
+    serializer_class = StaffSalaryComponentSerializer
+    permission_classes = [IsAuthenticated, IsCLerk]
+
+    def get_queryset(self):
+        queryset = StaffSalaryComponent.objects.filter(
+            staff__school=self.request.user.school
+        ).select_related("staff", "component")
+
+        staff = self.request.query_params.get("staff")
+        component_type = self.request.query_params.get("component_type")
+        is_active = self.request.query_params.get("is_active")
+
+        if staff:
+            queryset = queryset.filter(staff_id=staff)
+        if component_type:
+            queryset = queryset.filter(component__component_type=component_type)
+        if is_active in ["true", "false"]:
+            queryset = queryset.filter(is_active=is_active == "true")
+
+        return queryset.order_by("staff__name", "component__name")
+
+
+class StaffSalaryPaymentViewSet(ModelViewSet):
+    queryset = StaffSalaryPayment.objects.all()
+    serializer_class = StaffSalaryPaymentSerializer
+    permission_classes = [IsAuthenticated, IsCLerk]
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return GenerateStaffSalaryPaymentSerializer
+        return StaffSalaryPaymentSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payment = serializer.save()
+        response_serializer = StaffSalaryPaymentSerializer(
+            payment, context={"request": request}
+        )
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    def get_queryset(self):
+        queryset = StaffSalaryPayment.objects.filter(
+            school=self.request.user.school
+        ).select_related("staff", "paid_by")
+
+        staff = self.request.query_params.get("staff")
+        salary_month = self.request.query_params.get("salary_month")
+        payment_mode = self.request.query_params.get("payment_mode")
+        payment_status = self.request.query_params.get("payment_status")
+
+        if staff:
+            queryset = queryset.filter(staff_id=staff)
+        if salary_month:
+            queryset = queryset.filter(salary_month=salary_month)
+        if payment_mode:
+            queryset = queryset.filter(payment_mode=payment_mode)
+        if payment_status:
+            queryset = queryset.filter(payment_status=payment_status)
+
+        return queryset.order_by("-salary_month", "staff__name")
 
 
 class StudentFeeViewSet(ModelViewSet):

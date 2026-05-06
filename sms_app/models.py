@@ -3,6 +3,7 @@
 from django.db import models
 import uuid
 from django.contrib.auth.models import AbstractUser
+from django.utils import timezone
 from django.utils.text import slugify
 
 from django.conf import settings
@@ -285,7 +286,7 @@ class Admission(models.Model):
         AdmissionForm, on_delete=models.SET_NULL, null=True, blank=True
     )
 
-    temp_user = models.ForeignKey(  # ✅ IMPORTANT
+    temp_user = models.ForeignKey(  # IMPORTANT
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
@@ -771,6 +772,7 @@ class Time_table(models.Model):
 
 
 class AttendanceTimeRule(models.Model):
+    
     school = models.ForeignKey(
         School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
     )
@@ -780,6 +782,7 @@ class AttendanceTimeRule(models.Model):
 
 
 class AttendanceLocation(models.Model):
+    
     school = models.ForeignKey(
         School, on_delete=models.CASCADE, null=True, blank=True, db_index=True
     )
@@ -799,12 +802,31 @@ class Attendance(models.Model):
     staff = models.ForeignKey(Staff, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=255, null=True, blank=True)
     category = models.CharField(max_length=20, null=True, blank=True)
+    attendance_date = models.DateField(default=timezone.localdate, db_index=True)
     date_time = models.DateTimeField(null=True, blank=True)
     is_present = models.BooleanField(default=False)
+    is_half_day = models.BooleanField(default=False)
 
+    check_in = models.DateTimeField(null=True, blank=True)
+    check_out = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["staff", "attendance_date"],
+                name="unique_staff_attendance_per_day",
+            )
+        ]
+        
+        indexes = [
+            models.Index(
+                fields=["school", "attendance_date"],
+                name="attendance_school_date_idx",
+            )
+        ]
 
     def __str__(self):
-        return f"{self.name} - {self.date}"
+        return f"{self.name} - {self.attendance_date}"
 
 
 class LeaveTemplate(models.Model):
@@ -1212,3 +1234,114 @@ class StudentFeePayment(models.Model):
 
     
 
+# ---------TABLES FOR SALARY--------
+
+
+class SalaryComponent(models.Model):
+    COMPONENT_TYPE = (
+        ("earning", "Earning"),
+        ("deduction", "Deduction"),
+    )
+
+    name = models.CharField(max_length=255)  # DA, HRA, PF
+    component_type = models.CharField(max_length=20, choices=COMPONENT_TYPE)
+    is_active = models.BooleanField(default=True)
+    school = models.ForeignKey(School, on_delete=models.CASCADE)
+    
+    
+class StaffSalaryComponent(models.Model):
+    
+    CALCULATION_TYPE = (
+        ("fixed", "Fixed"),
+        ("percentage", "Percentage"),
+    )
+
+    staff = models.ForeignKey(Staff, on_delete=models.CASCADE, related_name="salary_components")
+    component = models.ForeignKey(SalaryComponent, on_delete=models.CASCADE)
+
+    calculation_type = models.CharField(max_length=20, choices=CALCULATION_TYPE)
+    value = models.DecimalField(max_digits=5, decimal_places=2)
+
+    # optional
+    is_active = models.BooleanField(default=True)
+
+
+class StaffSalaryPayment(models.Model):
+    PAYMENT_MODE = (
+        ("online", "Online"),
+        ("offline", "Offline"),
+    )
+
+    PAYMENT_STATUS = (
+        ("pending", "Pending"),
+        ("paid", "Paid"),
+        ("cancelled", "Cancelled"),
+    )
+
+    school = models.ForeignKey(School, on_delete=models.CASCADE, db_index=True)
+    staff = models.ForeignKey(
+        Staff, on_delete=models.CASCADE, related_name="salary_payments"
+    )
+
+    staff_name = models.CharField(max_length=255, null=True, blank=True)
+    staff_category = models.CharField(max_length=100, null=True, blank=True)
+    salary_month = models.CharField(
+        max_length=7,
+        help_text="Salary month in YYYY-MM format.",
+    )
+
+    basic_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_earnings = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    working_days = models.PositiveIntegerField(default=0)
+    present_days = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    absent_days = models.PositiveIntegerField(default=0)
+    half_days = models.PositiveIntegerField(default=0)
+    attendance_deduction = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0
+    )
+    component_snapshot = models.JSONField(default=list, blank=True)
+    net_salary = models.DecimalField(max_digits=12, decimal_places=2)
+    paid_amount = models.DecimalField(max_digits=12, decimal_places=2)
+
+    payment_mode = models.CharField(max_length=20, choices=PAYMENT_MODE)
+    payment_status = models.CharField(
+        max_length=20, choices=PAYMENT_STATUS, default="paid"
+    )
+    transaction_id = models.CharField(max_length=255, null=True, blank=True)
+    receipt_number = models.CharField(max_length=100, null=True, blank=True)
+    payment_date = models.DateTimeField(null=True, blank=True)
+    note = models.TextField(null=True, blank=True)
+
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="staff_salary_payments",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["staff", "salary_month"],
+                name="unique_staff_salary_payment_per_month",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["school", "salary_month"],
+                name="sal_pay_school_month_idx",
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.staff:
+            self.school = self.staff.school
+            self.staff_name = self.staff.name
+            self.staff_category = self.staff.category
+
+        super().save(*args, **kwargs)
