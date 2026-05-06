@@ -590,15 +590,15 @@ class StaffView(ModelViewSet):
     # 🔹 Get staff list with Redis cache
     def get_queryset(self):
         user = self.request.user
-        cache_key = f"staff_list_{user.id}"
+        # cache_key = f"staff_list_{user.id}"
 
-        staff_qs = cache.get(cache_key)
-        if staff_qs:
-            print("its form cach")
+        # staff_qs = cache.get(cache_key)
+        # if staff_qs:
+        #     print("its form cach")
 
-        if not staff_qs:
-            staff_qs = Staff.objects.filter(school__login_id=user)
-            cache.set(cache_key, staff_qs, timeout=60 * 60 * 5)  # 5 hours cache
+        # if not staff_qs:
+        staff_qs = Staff.objects.filter(school__login_id=user)
+        # cache.set(cache_key, staff_qs, timeout=60 * 60 * 5)  # 5 hours cache
 
         return staff_qs
 
@@ -980,9 +980,13 @@ class FormStatus(ModelViewSet):
 
 # for send form link
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def ShareFormLink(request):
-    form = AdmissionForm.objects.filter(is_active=True).first()
-
+    form = AdmissionForm.objects.filter(
+        school=request.user.school,
+        is_active=True
+    ).first()
+    
     form_link = f"/admission/{form.unique_link}/"
 
     return Response({"form_link": form_link})

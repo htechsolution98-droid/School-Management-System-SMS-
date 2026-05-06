@@ -471,6 +471,7 @@ class StudentVerify(models.Model):
     student = models.ForeignKey(Student,on_delete=models.CASCADE)
     clerk_verify = models.BooleanField(default=False)
     
+    
 
 # # ======newww addd======
 # class StudentStatus(models.Model):
