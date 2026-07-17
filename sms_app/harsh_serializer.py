@@ -280,25 +280,53 @@ class ChangeLeavePerDaySerializer(serializers.ModelSerializer):
             leave_type=leave_type, staff=staff
         ).first()
 
+        # if new_status == "APPROVED" and old_status != "APPROVED":
+        #     if remaining_data:
+        #         if remaining_data.remaining_leaves <= 0:
+        #             leave_request.is_paid = True
+        #             leave_request.save()
+                    
+        #         else:
+        #             remaining_data.remaining_leaves -= 1
+        #             remaining_data.save()
+                
+                
+        #     instance.approved_at = timezone.now()
+
+        # # Case 2: APPROVED → REJECTED/CANCELLED (restore leaves)
+        # elif old_status == "APPROVED" and new_status in ["REJECTED", "CANCELLED"]:
+        #     if remaining_data:
+        #         remaining_data.remaining_leaves += 1
+        #         remaining_data.save()
+        #     instance.approved_at = None
+        
+        
         # Case 1: PENDING/REJECTED → APPROVED (consume leaves)
         if new_status == "APPROVED" and old_status != "APPROVED":
             if remaining_data:
                 if remaining_data.remaining_leaves <= 0:
-                    leave_request.is_paid = True
-                    leave_request.save()
-                    
+                    # no quota -> this specific day is paid (salary deduction)
+                    instance.is_paid = True
+                    leave_request.is_paid = True   # optional compatibility flag
+                    leave_request.save(update_fields=["is_paid"])
                 else:
                     remaining_data.remaining_leaves -= 1
                     remaining_data.save()
-                
-                
+                    instance.is_paid = False
+            else:
+                # no remaining-data configured -> treat as paid by default
+                instance.is_paid = True
+
             instance.approved_at = timezone.now()
 
         # Case 2: APPROVED → REJECTED/CANCELLED (restore leaves)
         elif old_status == "APPROVED" and new_status in ["REJECTED", "CANCELLED"]:
-            if remaining_data:
+            # if this day previously consumed a remaining leave, restore it
+            if remaining_data and not instance.is_paid:
                 remaining_data.remaining_leaves += 1
                 remaining_data.save()
+            # clear per-day paid flag and approval timestamp
+            instance.is_paid = False
             instance.approved_at = None
 
         #Case 3: Any other transition to REJECTED/CANCELLED (no leaves to restore)

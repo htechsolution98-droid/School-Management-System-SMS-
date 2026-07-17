@@ -189,10 +189,10 @@ router.register(r"attendance-location", AttendanceLocationViewSet, basename="att
 
 
 router.register(r"certificate-types", CertificateTypeViewSet, basename="certificate-type")
-router.register(r"request-certificate", CertificateRequestViewSet, basename="request-certificate")       # student
-router.register(r"certificate-requests", ClerkCertificateRequestViewSet, basename="certificate-requests")
 router.register(r"certificate-templates",CertificateTemplateAdminViewSet,basename="certificate-template")
 router.register(r"certificate-template-fields",CertificateTemplateFieldAdminViewSet,basename="certificate-template-field")
+router.register(r"request-certificate", CertificateRequestViewSet, basename="request-certificate")       # student
+router.register(r"certificate-requests", ClerkCertificateRequestViewSet, basename="certificate-requests")
 router.register(r"certificates",CertificateAPIView,basename="certificates")
 
 
@@ -308,7 +308,7 @@ urlpatterns = [
     path('api/schoollist/',SchoolListView.as_view()),
     path('api/face-enroll/',StaffFaceEnrollView.as_view()),
     path('api/face-verify/',StaffFaceVerifyView.as_view()),
-    path('perstaff-leave/',GetRemainingLeavePerStaffView.as_view()),
+    # path('perstaff-leave/',GetRemainingLeavePerStaffView.as_view()),
     # path('homework-submission/',HomeworkSubmissionView.as_view()),
     path('api/student-documents/',StudentDocumentView.as_view()),
     path("api/student-document/<int:id>/", StudentDocumentView.as_view()),

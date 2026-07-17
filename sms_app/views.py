@@ -457,21 +457,37 @@ class UserListView(generics.ListAPIView):
 
 
 class ModuleView(ModelViewSet):
-    queryset = Module.objects.all()
+    # queryset = Module.objects.all()
     serializer_class = ModuleSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        school = self.request.user.school
+        user = self.request.user
+        if not user or not user.is_authenticated:
+            return Module.objects.none()
+
+        # superuser sees all active modules
+        if user.is_superuser:
+            return Module.objects.filter(is_active=True)
+
+        # modules explicitly assigned to this user
+        user_module_ids = UserModuleAccess.objects.filter(user=user).values_list("module_id", flat=True)
+
+        # if user has no school, return only their assigned modules
+        school = getattr(user, "school", None)
+        if not school:
+            return Module.objects.filter(id__in=user_module_ids, is_active=True)
+
+        # otherwise return intersection: enabled features for school AND user's assigned modules
         enabled_feature_ids = SchoolFeature.objects.filter(
-            school=school,
-            is_enabled=True,
+            school=school, is_enabled=True
         ).values_list("feature_id", flat=True)
 
         return Module.objects.filter(
             for_role_id__in=enabled_feature_ids,
+            id__in=user_module_ids,
             is_active=True,
-        )
+        ).distinct()
 
 
 class ChangeModuleView(ModelViewSet):
@@ -1134,7 +1150,7 @@ class FeeVerifyView(ModelViewSet):
 # this for only get its public use on Admission fprosecc
 class ClassView(ModelViewSet):
     queryset = SchoolClass.objects.all()
-    serializer_class = SchoolClassSerializer
+    serializer_class = SchoolClassMainSerializer
     permission_classes = [IsAuthenticated]
     http_method_names = ["get"]
 
@@ -1155,7 +1171,7 @@ from sms_app.models import SchoolClass
 
 class SchoolClassView(ModelViewSet):
     queryset = SchoolClass.objects.all()
-    serializer_class = SchoolClassSerializer
+    serializer_class = SchoolClassMainSerializer
     permission_classes = [IsAuthenticated, Isprincipal]
 
     def get_queryset(self):
@@ -2802,22 +2818,6 @@ class TodayAttendanceStatusView(APIView):
         )
 
 
-
-class GetRemainingLeavePerStaffView(APIView):
-    permission_classes=[IsAuthenticated]
-    def get(self,request):
-        leave=LeaveRequest.objects.filter(staff=request.user.staff,school=request.user.school).order_by("-created_at")
-        
-        # leave_template=LeaveTemplate.objects.filter(staff=request.user.staff,school=request.user.school)
-        # print(leave_template)
-        remaining_leaves=StaffRemainingLeave.objects.filter(staff=request.user.staff,school=request.user.school).order_by("year","month")
-        
-        leave_request=LeaveRequestSerializer(leave,many=True)
-        remaining_leaves_left=StaffRemainingLeaveSerializer(remaining_leaves,many=True)
-        return Response({
-            "Leave_request":leave_request.data,
-            "reamining_leaves":remaining_leaves_left.data
-        })
 
 # class AnnouncementView(ModelViewSet):
 #     queryset = Announcement.objects.all()

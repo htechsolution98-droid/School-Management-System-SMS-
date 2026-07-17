@@ -548,7 +548,7 @@ class FeesVerifySerializer(serializers.ModelSerializer):
 # =========ADMISSIONS PROCESS SERIALIZERS==========
 
 
-class SchoolClassSerializer(serializers.ModelSerializer):
+class SchoolClassMainSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SchoolClass
@@ -2500,284 +2500,6 @@ class AttendanceSerializer(serializers.ModelSerializer):
             return attendance
 
 
-class LeaveTemplateSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = LeaveTemplate
-        fields = "__all__"
-        read_only_fields = ["school"]
-
-    def validate_leave_num(self, value):
-        if value <= 0:
-            raise serializers.ValidationError(
-                "Leave number must be greater than zero."
-            )
-        return value
-
-    def validate_leave_type(self, value):
-        if not value or not value.strip():
-            raise serializers.ValidationError(
-                "Leave type cannot be empty."
-            )
-        return value.strip()
-
-    def validate(self, attrs):
-        request = self.context.get("request")
-
-        if not request or not hasattr(request, "user"):
-            raise serializers.ValidationError(
-                "Request user is required."
-            )
-
-        school = getattr(request.user, "school", None)
-
-        if not school:
-            raise serializers.ValidationError(
-                "User school is not configured."
-            )
-
-        staff = attrs.get("staff")
-        leave_type = attrs.get("leave_type")
-        time_line = attrs.get("time_line")
-
-        qs = LeaveTemplate.objects.filter(
-            school=school,
-            staff=staff,
-            leave_type=leave_type,
-            time_line=time_line,
-        )
-
-        # Ignore current record during update
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-
-        if qs.exists():
-            raise serializers.ValidationError(
-                "This leave template already exists for this staff."
-            )
-
-        return attrs
-
-    def create(self, validated_data):
-        school = self.context["request"].user.school
-
-        leave_template = LeaveTemplate.objects.create(
-            # school=school,
-            **validated_data
-        )
-
-        StaffRemainingLeave.objects.create(
-            school=school,
-            staff=leave_template.staff,
-            leave_template=leave_template,
-            month=timezone.now().month,
-            year=timezone.now().year,
-            total_leaves=leave_template.leave_num,
-            remaining_leaves=leave_template.leave_num,
-        )
-
-        return leave_template
-
-
-# ADD SERIALIZE FOR LEAVE DROWPOWN IN THROUGH LeaveTemplate MODEL
-from datetime import timedelta
-
-
-class LeaveRequestSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = LeaveRequest
-        fields = "__all__"
-        read_only_fields = ["school", "staff", "total_days", "approved_by"]
-
-    def create(self, validated_data):
-        start_date = validated_data.get("start_date")
-        end_date = validated_data.get("end_date")
-        school = self.context.get("request").user.school
-        user = self.context.get("request").user
-
-        if end_date < start_date:
-            raise serializers.ValidationError("End date cannot be before start date.")
-
-        # ✅ calculate total days
-        total_days = (end_date - start_date).days + 1
-        validated_data["total_days"] = total_days
-        validated_data["school"] = school
-
-        staff = Staff.objects.filter(user=user, school=school).first()
-        validated_data["staff"] = staff
-
-        # ✅ create main LeaveRequest first
-        leave_request = LeaveRequest.objects.create(**validated_data)
-
-        # ✅ now create LeavePerDay entries
-        current = start_date
-        while current <= end_date:
-            LeavePerDay.objects.create(
-                school=school,
-                leave=leave_request,  # ✅ correct instance
-                date=current,  # store as DateField (recommended)
-            )
-            current += timedelta(days=1)
-
-        return leave_request
-
-
-class StaffRemainingLeaveSerializer(serializers.ModelSerializer):
-    leave_type = serializers.CharField(
-        source="leave_template.leave_type", read_only=True
-    )
-
-    class Meta:
-        model = StaffRemainingLeave
-        fields = ["id", "staff", "leave_type", "total_leaves", "month","year","remaining_leaves"]
-        read_only_fields = ["id"]
-
-
-class GetLeavePerDaySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = LeavePerDay
-        fields = ["id", "date", "school", "leave", "status", "approved_at"]
-        read_only_fields = ["id", "date", "school", "leave"]
-
-
-class GetLeaveRequestSerializer(serializers.ModelSerializer):
-    leave_days = GetLeavePerDaySerializer(many=True, read_only=True)
-    remaining_leaves = serializers.SerializerMethodField()
-
-    class Meta:
-        model = LeaveRequest
-        fields = [
-            "id",
-            "staff",
-            "leave_type",
-            "reason",
-            "total_days",
-            "start_date",
-            "end_date",
-            "created_at",
-            "updated_at",
-            "leave_days",
-            "remaining_leaves",
-        ]
-        read_only_fields = [
-            "school",
-            "staff",
-            "leave_type",
-            "total_days",
-            "leave_days",
-            "remaining_leaves",
-        ]
-
-    def get_remaining_leaves(self, obj):
-        queryset = StaffRemainingLeave.objects.filter(
-            staff=obj.staff, school=obj.school
-        )
-        return StaffRemainingLeaveSerializer(queryset, many=True).data
-
-
-from django.db.models import F
-
-
-class ChangeLeavePerDaySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = LeavePerDay
-        fields = ["status"]
-
-    def validate_status(self, value):
-        valid_statuses = ["PENDING", "APPROVED", "REJECTED", "CANCELLED"]
-        if value not in valid_statuses:
-            raise serializers.ValidationError(
-                f"Invalid status. Valid options are: {', '.join(valid_statuses)}"
-            )
-        return value
-
-    def validate(self, attrs):
-        request = self.context.get("request")
-        if not request or not hasattr(request, "user"):
-            raise serializers.ValidationError("Request user is required.")
-
-        new_status = attrs.get("status")
-        instance = self.instance
-
-        # ✅ Check if status is already in a final state
-        if instance.status in ["CANCELLED"]:
-            raise serializers.ValidationError(
-                f"Cannot change status from {instance.status}. This leave is already finalized."
-            )
-
-        # ✅ Check invalid transitions
-        if instance.status == "REJECTED" and new_status in ["APPROVED"]:
-            raise serializers.ValidationError("Cannot approve a rejected leave.")
-
-        # ✅ If changing to APPROVED, validate remaining leaves
-        if new_status == "APPROVED" and instance.status != "APPROVED":
-            leave_request = instance.leave
-            staff = leave_request.staff
-            leave_type = leave_request.leave_type
-
-            remaining_data = StaffRemainingLeave.objects.filter(
-                leave_template__leave_type=leave_type, staff=staff
-            ).first()
-
-            if not remaining_data:
-                raise serializers.ValidationError(
-                    f"No leave template found for {leave_type}."
-                )
-
-            if remaining_data.remaining_leaves <= 0:
-                raise serializers.ValidationError(
-                    f"Insufficient {leave_type} leaves. Remaining: {remaining_data.remaining_leaves}"
-                )
-
-        return attrs
-
-    def update(self, instance, validated_data):
-        user = self.context["request"].user
-        new_status = validated_data.get("status")
-        old_status = instance.status
-
-        leave_request = instance.leave
-        staff = leave_request.staff
-        leave_type = leave_request.leave_type
-
-        remaining_data = StaffRemainingLeave.objects.filter(
-            leave_template__leave_type=leave_type, staff=staff
-        ).first()
-
-        # ✅ Case 1: PENDING/REJECTED → APPROVED (consume leaves)
-        if new_status == "APPROVED" and old_status != "APPROVED":
-            if remaining_data:
-                remaining_data.remaining_leaves -= 1
-                remaining_data.save()
-            instance.approved_at = timezone.now()
-
-        # ✅ Case 2: APPROVED → REJECTED/CANCELLED (restore leaves)
-        elif old_status == "APPROVED" and new_status in ["REJECTED", "CANCELLED"]:
-            if remaining_data:
-                remaining_data.remaining_leaves += 1
-                remaining_data.save()
-            instance.approved_at = None
-
-        # ✅ Case 3: Any other transition to REJECTED/CANCELLED (no leaves to restore)
-        elif new_status in ["REJECTED", "CANCELLED"]:
-            instance.approved_at = None
-
-        instance.status = new_status
-        instance.save()
-
-        return instance
-class BulkLeaveStatusSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(
-        choices=["APPROVED", "REJECTED"]
-    )
-
-
-# class
-class GetRemainingLeaveSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = StaffRemainingLeave
-        fields = ["leave_template"]
-
 
 # class AnnouncementTargetSerializer(serializers.ModelSerializer):
 #     class Meta:
@@ -3452,15 +3174,38 @@ class GenerateStaffSalaryPaymentSerializer(serializers.ModelSerializer):
         )
         present_count = attendance_qs.filter(is_present=True, is_half_day=False).count()
         half_days = attendance_qs.filter(is_present=True, is_half_day=True).count()
-        absent_days = max(working_days - present_count - half_days, 0)
+        # absent_days = max(working_days - present_count - half_days, 0)
         present_days = Decimal(present_count) + (Decimal(half_days) / Decimal("2"))
-        # attendance_deduction = (
-        #     (Decimal(absent_days) * per_day_salary)
-        #     + (Decimal(half_days) * per_day_salary / Decimal("2"))
-        # ).quantize(Decimal("0.01"))
+        # # attendance_deduction = (
+        # #     (Decimal(absent_days) * per_day_salary)
+        # #     + (Decimal(half_days) * per_day_salary / Decimal("2"))
+        # # ).quantize(Decimal("0.01"))
         
-        approved_paid_days = get_approved_paid_leave_days(staff, month_start, month_end)
-        attendance_deduction = Decimal(approved_paid_days) * per_day_salary
+        # approved_paid_days = get_approved_paid_leave_days(staff, month_start, month_end)
+        # attendance_deduction = Decimal(approved_paid_days) * per_day_salary
+        
+        
+        # existing values: working_days, month_start, month_end, present_count, half_days, per_day_salary
+        absent_days = max(working_days - present_count - half_days, 0)
+
+        # approved leave days in month
+        approved_leave_qs = LeavePerDay.objects.filter(
+            leave__staff=staff,
+            status="APPROVED",
+            date__range=(month_start, month_end),
+        )
+
+        approved_paid_days = approved_leave_qs.filter(is_paid=True).count()
+        approved_leave_total = approved_leave_qs.count()
+
+        # deduction days = approved_paid_days + absent_days_without_any_approved_leave
+        # absent_days_without_any_approved_leave = absent_days - approved_leave_total
+        deduction_days = Decimal(absent_days + approved_paid_days - approved_leave_total)
+        if deduction_days < 0:
+            deduction_days = Decimal(0)
+
+        attendance_deduction = (deduction_days * per_day_salary).quantize(Decimal("0.01"))
+
 
         total_earnings = Decimal("0.00")
         component_deductions = Decimal("0.00")
