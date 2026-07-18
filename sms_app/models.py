@@ -1168,10 +1168,11 @@ class LeavePerDay(models.Model):
         ("CANCELLED", "Cancelled"),
     ]
 
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default="PENDING", null=True, blank=True
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING", null=True, blank=True)
+    
     approved_at = models.DateTimeField(null=True, blank=True)
+    
+    is_paid = models.BooleanField(default=False)   # new
 
     def __str__(self):
         return f"{self.date} - {self.leave.total_days} leaves"
