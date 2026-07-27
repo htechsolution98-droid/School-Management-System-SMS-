@@ -238,7 +238,7 @@ class CertificateTemplateFieldAdminViewSet(ModelViewSet):
         IsAuthenticated,
         IsCLerk
     ]
-
+        
     def get_queryset(self):
 
         staff = Staff.objects.filter(
