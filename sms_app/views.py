@@ -1493,9 +1493,8 @@ class DocumentSubmissionView(ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            if admission.form.fee_type == "general":
-
-                fee_amount = float(admission.form.fees)
+            if admission.form.fee_type == "general" and admission.form.fees_enable:
+                fee_amount = Decimal(admission.form.fees)
 
             else:
 
